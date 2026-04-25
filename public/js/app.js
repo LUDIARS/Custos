@@ -32,7 +32,24 @@ export async function apiFetch(path, opts = {}) {
     const headers = { "content-type": "application/json", ...(opts.headers ?? {}) };
     const tok = getToken();
     if (tok) headers["authorization"] = `Bearer ${tok}`;
-    return await fetch(API + path, { ...opts, headers });
+    const method = (opts.method ?? "GET").toUpperCase();
+    const t0 = performance.now();
+    appendLog({ kind: "api", stream: "stdout", text: `→ ${method} ${path}` });
+    try {
+        const res = await fetch(API + path, { ...opts, headers });
+        const ms  = (performance.now() - t0).toFixed(0);
+        appendLog({
+            kind:   "api",
+            stream: res.ok ? "stdout" : "stderr",
+            text:   `← ${res.status} ${method} ${path} (${ms}ms)`,
+        });
+        return res;
+    } catch (err) {
+        const ms = (performance.now() - t0).toFixed(0);
+        appendLog({ kind: "api", stream: "stderr",
+            text: `✗ ${method} ${path} (${ms}ms) ${err.message ?? err}` });
+        throw err;
+    }
 }
 /** WebSocket 用の base URL (`ws://...` / `wss://...`)。同 origin。 */
 export function wsBase() {
@@ -52,10 +69,8 @@ const vkGrid       = $("vkGrid");
 const logStream    = $("logStream");
 const testStream   = $("testStream");
 const wsStatusEl   = $("wsStatus");
-const overlayToggle = $("overlayToggle");
-const layoutEl     = document.querySelector(".layout");
-const tabs         = [...document.querySelectorAll(".tab")];
-const tabPanels    = [...document.querySelectorAll(".tab-panel")];
+const mainTabs     = [...document.querySelectorAll(".main-tab")];
+const mainPanels   = [...document.querySelectorAll(".main-panel")];
 const streamVideo       = $("streamVideo");
 const streamImage       = $("streamImage");
 const streamPlaceholder = $("streamPlaceholder");
@@ -99,15 +114,18 @@ async function boot() {
     btnStreamStart.addEventListener("click", () => startCapture(state.appId));
     btnStreamStop .addEventListener("click", () => teardownCapture());
 
-    overlayToggle.addEventListener("change", () => {
-        layoutEl.classList.toggle("overlay", overlayToggle.checked);
-    });
     $("btnClearOutput").addEventListener("click", () => {
         logStream.textContent = "";
         testStream.textContent = "";
     });
-    for (const t of tabs) t.addEventListener("click", () => switchTab(t.dataset.tab));
+    for (const t of mainTabs) t.addEventListener("click", () => switchMainTab(t.dataset.tab));
     connectWs();
+}
+
+function switchMainTab(tabId) {
+    for (const t of mainTabs)   t.classList.toggle("active", t.dataset.tab === tabId);
+    for (const t of mainTabs)   t.setAttribute("aria-selected", String(t.dataset.tab === tabId));
+    for (const p of mainPanels) p.classList.toggle("active", p.dataset.tab === tabId);
 }
 
 function applyCaptureMode() {
@@ -422,15 +440,11 @@ function appendLog(msg) {
     span.classList.add(msg.stream === "stderr" ? "stderr" : "stdout");
     if (msg.kind && msg.kind !== "meta") span.classList.add(msg.kind);
     if (msg.kind === "meta") span.classList.add("meta");
-    span.textContent = `${msg.text}\n`;
+    // 改行で終わっていなければ追加 (api ログを 1 行 1 行きれいに揃えるため)
+    const text = msg.text.endsWith("\n") ? msg.text : msg.text + "\n";
+    span.textContent = text;
     target.appendChild(span);
     target.scrollTop = target.scrollHeight;
-}
-
-function switchTab(tabId) {
-    for (const t of tabs)      t.classList.toggle("active", t.dataset.tab === tabId);
-    for (const t of tabs)      t.setAttribute("aria-selected", String(t.dataset.tab === tabId));
-    for (const p of tabPanels) p.classList.toggle("active", p.dataset.tab === tabId);
 }
 
 boot();

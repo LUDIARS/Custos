@@ -21,64 +21,65 @@
     </div>
   </header>
 
+  <!-- ─── メインタブバー (Build 行のすぐ下) ──────────────── -->
+  <nav class="main-tabs" role="tablist" aria-label="メインビュー切替">
+    <button class="main-tab active" data-tab="view"  role="tab" aria-selected="true"  id="mainTabView">VIEW</button>
+    <button class="main-tab"        data-tab="logs"  role="tab" aria-selected="false" id="mainTabLogs">LOG</button>
+    <button class="main-tab"        data-tab="tests" role="tab" aria-selected="false" id="mainTabTests">TEST</button>
+    <span class="main-tabs-spacer"></span>
+    <button id="btnClearOutput" class="ghost" type="button">Clear</button>
+  </nav>
+
   <main class="layout">
 
-    <!-- ─── 配信領域 ─────────────────────────────── -->
-    <section class="stream-area" aria-label="アプリ画面">
-      <div class="stream-toolbar">
-        <label class="capture-mode-label">
-          Capture
-          <select id="captureMode" aria-label="キャプチャモード">
-            <option value="snapshot">Snapshot</option>
-            <option value="webrtc">Realtime (WebRTC)</option>
-          </select>
-        </label>
-        <span class="stream-toolbar-spacer"></span>
-        <button id="btnSnapshot"     class="ghost capture-action mode-snapshot" type="button" title="1 フレーム撮影して下に表示 (curl で /api/apps/:id/screenshot を叩いても同じ PNG が取れる)">📷 Capture</button>
-        <button id="btnStreamStart"  class="ghost capture-action mode-webrtc"   type="button" hidden>▶ Stream</button>
-        <button id="btnStreamStop"   class="ghost capture-action mode-webrtc"   type="button" hidden>⏹ Stop</button>
-        <a id="btnDownload" class="ghost capture-action" href="#" download hidden>⬇ Download</a>
-      </div>
-      <div class="stream-frame" id="streamFrame">
-        <video id="streamVideo" autoplay playsinline muted></video>
-        <img   id="streamImage" alt="latest screenshot" />
-        <div class="stream-placeholder" id="streamPlaceholder">
-          <div class="ph-title">No capture yet</div>
-          <div class="ph-hint">Snapshot モード: 上の「📷 Capture」を押すと 1 フレーム取得 / Realtime: 「▶ Stream」で WebRTC を開始</div>
-        </div>
+    <!-- ─── VIEW タブ (配信 + バーチャルキー) ───────── -->
+    <section class="main-panel active" data-tab="view" id="panelView">
+      <div class="view-grid">
+        <!-- 配信領域 -->
+        <section class="stream-area" aria-label="アプリ画面">
+          <div class="stream-frame" id="streamFrame">
+            <video id="streamVideo" autoplay playsinline muted></video>
+            <img   id="streamImage" alt="latest screenshot" />
+            <div class="stream-placeholder" id="streamPlaceholder">
+              <div class="ph-title">No capture yet</div>
+              <div class="ph-hint">下の Capture セクションから「📷 Capture」または「▶ Stream」を押してください</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 仮想キー + Capture コントロール -->
+        <section class="virtual-keys" aria-label="バーチャルキー">
+          <div class="vk-toolbar">
+            <span class="vk-label">Virtual Keys</span>
+            <span class="vk-hint">アプリに直接入力されます</span>
+            <span class="vk-toolbar-spacer"></span>
+            <label class="capture-mode-label">
+              Capture
+              <select id="captureMode" aria-label="キャプチャモード">
+                <option value="snapshot">Snapshot</option>
+                <option value="webrtc">Realtime (WebRTC)</option>
+              </select>
+            </label>
+            <button id="btnSnapshot"    class="ghost capture-action mode-snapshot" type="button" title="1 フレーム取得 (curl で /api/apps/:id/screenshot を叩いても同じ PNG が取れる)">📷 Capture</button>
+            <button id="btnStreamStart" class="ghost capture-action mode-webrtc"   type="button" hidden>▶ Stream</button>
+            <button id="btnStreamStop"  class="ghost capture-action mode-webrtc"   type="button" hidden>⏹ Stop</button>
+            <a id="btnDownload" class="ghost capture-action" href="#" download hidden>⬇</a>
+          </div>
+          <div class="vk-grid" id="vkGrid">
+            <div class="vk-empty">アプリを選択するとバーチャルキーが表示されます。</div>
+          </div>
+        </section>
       </div>
     </section>
 
-    <!-- ─── 仮想キー領域 (広め) ─────────────────── -->
-    <section class="virtual-keys" aria-label="バーチャルキー">
-      <div class="vk-toolbar">
-        <span class="vk-label">Virtual Keys</span>
-        <span class="vk-hint">アプリに直接入力されます</span>
-      </div>
-      <div class="vk-grid" id="vkGrid">
-        <!-- ボタンは app の input.buttons から生成 -->
-        <div class="vk-empty">アプリを選択するとバーチャルキーが表示されます。</div>
-      </div>
+    <!-- ─── LOG タブ ─────────────────────────────── -->
+    <section class="main-panel" data-tab="logs" id="panelLogs">
+      <pre class="log-stream" id="logStream"></pre>
     </section>
 
-    <!-- ─── ログ / テスト タブ ────────────────────── -->
-    <section class="output-area" aria-label="ログ・テスト出力">
-      <div class="tabs" role="tablist">
-        <button class="tab active" data-tab="logs"  role="tab" aria-selected="true"  id="tabLogs">Logs</button>
-        <button class="tab"        data-tab="tests" role="tab" aria-selected="false" id="tabTests">Tests</button>
-        <div class="tabs-spacer"></div>
-        <label class="overlay-toggle">
-          <input type="checkbox" id="overlayToggle">
-          オーバーレイ表示
-        </label>
-        <button id="btnClearOutput" class="ghost">Clear</button>
-      </div>
-      <div class="tab-panel active" data-tab="logs"  id="panelLogs">
-        <pre class="log-stream" id="logStream"></pre>
-      </div>
-      <div class="tab-panel"        data-tab="tests" id="panelTests">
-        <pre class="log-stream" id="testStream"></pre>
-      </div>
+    <!-- ─── TEST タブ ────────────────────────────── -->
+    <section class="main-panel" data-tab="tests" id="panelTests">
+      <pre class="log-stream" id="testStream"></pre>
     </section>
 
   </main>
@@ -89,8 +90,7 @@
     <span class="hint">Custos v0.1.0</span>
   </footer>
 
-  <!-- 同 origin 構成: API も WS も /api/* / /ws の相対 URL で叩ける。
-       config.js 注入は不要。 -->
+  <!-- 同 origin 構成: API も WS も /api/* / /ws の相対 URL で叩ける。 -->
   <script type="module" src="/js/app.js"></script>
 </body>
 </html>
