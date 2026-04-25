@@ -12,9 +12,9 @@
 
 import { connectWebRTC, closeWebRTC } from "/js/webrtc.js";
 
-// /config.js から `window.__CUSTOS_BACKEND__` が注入される。空文字なら同 origin。
-const BACKEND = (window.__CUSTOS_BACKEND__ ?? "").replace(/\/$/, "");
-const API = `${BACKEND}/api`;
+// **同 origin 運用**: backend と frontend は同じ Hono に乗っているので、
+// API も WS も相対 URL でよい。CORS / config.js 注入は不要。
+const API = "/api";
 const TOKEN_KEY = "custos.token";
 
 // ─── auth ──────────────────────────────────────
@@ -32,11 +32,10 @@ export async function apiFetch(path, opts = {}) {
     const headers = { "content-type": "application/json", ...(opts.headers ?? {}) };
     const tok = getToken();
     if (tok) headers["authorization"] = `Bearer ${tok}`;
-    return await fetch(API + path, { ...opts, headers, mode: "cors" });
+    return await fetch(API + path, { ...opts, headers });
 }
-/** WebSocket 用の base URL (`ws://...` / `wss://...`)。 */
+/** WebSocket 用の base URL (`ws://...` / `wss://...`)。同 origin。 */
 export function wsBase() {
-    if (BACKEND) return BACKEND.replace(/^http/, "ws");
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
     return `${proto}//${location.host}`;
 }
@@ -98,7 +97,7 @@ async function loadApps() {
         const res = await apiFetch(`/apps`);
         if (!res.ok) {
             appendLog({ kind: "meta", stream: "stderr",
-                text: `[custos] /api/apps HTTP ${res.status} — backend (${BACKEND || location.origin}) との通信に失敗。CUSTOS_OPEN=1 で立ち上げているか確認、もしくは認証 token を入れ直してください。\n` });
+                text: `[custos] /api/apps HTTP ${res.status} — サーバー (${location.origin}) との通信に失敗。CUSTOS_OPEN=1 で立ち上げているか確認してください。\n` });
             appSelect.innerHTML = "";
             appSelect.appendChild(opt("", "— 取得失敗 —"));
             return;
@@ -112,14 +111,13 @@ async function loadApps() {
         }
         if (state.apps.length === 0) {
             appendLog({ kind: "meta", stream: "stderr",
-                text: `[custos] apps.json にアプリが 0 件です。CUSTOS_APPS_FILE / cwd を確認してください。`
-                    + ` backend が見ているのは: ${BACKEND || "(same-origin)"} です。\n` });
+                text: "[custos] apps.json にアプリが 0 件です。CUSTOS_APPS_FILE / cwd を確認してください。\n" });
         } else {
             appendLog({ kind: "meta", stream: "stdout", text: `[custos] ${state.apps.length} apps loaded\n` });
         }
     } catch (err) {
         appendLog({ kind: "meta", stream: "stderr",
-            text: `[custos] /api/apps fetch error: ${err.message ?? err} (backend ${BACKEND || "(same-origin)"})\n` });
+            text: `[custos] /api/apps fetch error: ${err.message ?? err}\n` });
         appSelect.innerHTML = "";
         appSelect.appendChild(opt("", "— 取得失敗 —"));
     }

@@ -1,15 +1,16 @@
 /**
  * Custos エントリポイント。
  *
- * Backend (API + WS) と Frontend (静的) を **別ポート** で立てる。
- *   既定: frontend 4649 / backend 7676
- *   override: CUSTOS_PORT (backend) / CUSTOS_FRONTEND_PORT (frontend)
+ * **単一 Hono アプリを 4649 と 7676 の両方で listen** させる:
+ *   - http://localhost:4649/  (frontend port、慣例)
+ *   - http://localhost:7676/  (backend port、慣例)
+ *   - どちらを開いても同じ内容 (静的 UI + /api/* + /ws)
  *
- * Frontend は `/config.js` で `window.__CUSTOS_BACKEND__ = ...` を注入する。
- * ブラウザ JS はこれを使って CORS 越しに backend を呼ぶ。
+ * これにより CORS / 別 origin の罠を完全排除する。フロント JS は相対 URL
+ * (`/api/...` / `/ws`) だけ使えばよく、`/config.js` 注入も不要。
  *
- * Electron 経由で起動する場合は `electron/main.cjs` が frontend port に
- * BrowserWindow を向ける。
+ * ポートは `CUSTOS_PORT` (主) と `CUSTOS_FRONTEND_PORT` (副) で上書きでき、
+ * どちらか片方だけ無効化したい場合は値を `0` にする。
  */
 
 import { serve } from "@hono/node-server";
@@ -17,22 +18,15 @@ import type { Server as HttpServer } from "node:http";
 import { loadAppsConfig } from "./config/apps-config.js";
 import { AppsRegistry }   from "./apps/registry.js";
 import { AppsRunner }     from "./apps/runner.js";
-import { buildBackendApp, buildFrontendApp } from "./app.js";
+import { buildApp }       from "./app.js";
 import { attachWebSocketBroker } from "./ws/handler.js";
 import { WebRTCBroker } from "./capture/webrtc-broker.js";
 import { logger } from "./shared/logger.js";
 
-const BACKEND_PORT  = Number(process.env.CUSTOS_PORT ?? 7676);
+const BACKEND_PORT  = Number(process.env.CUSTOS_PORT          ?? 7676);
 const FRONTEND_PORT = Number(process.env.CUSTOS_FRONTEND_PORT ?? 4649);
-const HOST          = process.env.CUSTOS_HOST ?? "0.0.0.0";
+const HOST          = process.env.CUSTOS_HOST                  ?? "0.0.0.0";
 
-/// frontend が JS に注入する backend URL。明示指定が無ければ同ホストの BACKEND_PORT を指す。
-const BACKEND_URL_FOR_BROWSER = process.env.CUSTOS_BACKEND_URL
-    ?? `http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${BACKEND_PORT}`;
-
-// 子プロセス由来の例外がメインを落とさないようにグローバル安全網を張る。
-// ただし bind エラー (EADDRINUSE) や起動時に出るエラーは exit すべきなので、
-// `started` フラグが立つまでは fail-fast、立った後は継続する。
 let started = false;
 process.on("uncaughtException", (err: Error & { code?: string }) => {
     if (!started || err.code === "EADDRINUSE") {
@@ -64,37 +58,41 @@ async function main() {
     const runner   = new AppsRunner(registry);
     const broker   = new WebRTCBroker();
 
-    // run プロセス終了 → そのアプリの capture も閉じる。
     runner.on("exit", (appId, kind) => {
         if (kind === "run") broker.closeAllForApp(appId);
     });
 
-    // ── Backend ──
-    const backend = buildBackendApp({ registry, runner, broker });
-    const backendServer = serve({ fetch: backend.fetch, hostname: HOST, port: BACKEND_PORT }, (info) => {
-        logger.info({ host: info.address, port: info.port }, "backend listening");
-    });
-    attachWebSocketBroker(backendServer as unknown as HttpServer, { registry, runner }, "/ws");
+    // 単一の app instance を 2 ポートで listen させる。
+    const app = buildApp({ registry, runner, broker });
+    const servers: HttpServer[] = [];
 
-    // ── Frontend ──
-    const frontend = buildFrontendApp({ backendUrl: BACKEND_URL_FOR_BROWSER });
-    const frontendServer = serve({ fetch: frontend.fetch, hostname: HOST, port: FRONTEND_PORT }, (info) => {
-        logger.info({
-            host: info.address, port: info.port,
-            backendForBrowser: BACKEND_URL_FOR_BROWSER,
-        }, "frontend listening");
-        started = true;       // bind 成功後は uncaughtException で死なない
-        // ブラウザで開く URL を判りやすく出す。
-        // eslint-disable-next-line no-console
-        console.log(`\n  ▶ Open Custos: http://localhost:${info.port}/\n`);
-    });
+    const ports: { port: number; label: string }[] = [];
+    if (FRONTEND_PORT > 0) ports.push({ port: FRONTEND_PORT, label: "frontend" });
+    if (BACKEND_PORT  > 0 && BACKEND_PORT !== FRONTEND_PORT) {
+        ports.push({ port: BACKEND_PORT, label: "backend" });
+    }
+
+    for (const { port, label } of ports) {
+        const s = serve({ fetch: app.fetch, hostname: HOST, port }, (info) => {
+            logger.info({ host: info.address, port: info.port, label }, "listening");
+        });
+        // WS broker は全ポートで attach する (どちらに繋いでも /ws が動く)。
+        attachWebSocketBroker(s as unknown as HttpServer, { registry, runner }, "/ws");
+        servers.push(s as unknown as HttpServer);
+    }
+
+    started = true;
+
+    // eslint-disable-next-line no-console
+    console.log(`\n  ▶ Open Custos: http://localhost:${FRONTEND_PORT}/   (or http://localhost:${BACKEND_PORT}/)\n`);
 
     const shutdown = (sig: NodeJS.Signals) => {
         logger.info({ sig }, "shutting down");
         broker.shutdown();
         runner.shutdown();
-        backendServer.close();
-        frontendServer.close();
+        for (const s of servers) {
+            try { s.close(); } catch { /* ignore */ }
+        }
         setTimeout(() => process.exit(0), 200).unref();
         setTimeout(() => process.exit(1), 5000).unref();
     };
