@@ -46,7 +46,10 @@ export function wsBase() {
 function promptToken() {
     const cur = getToken();
     const next = window.prompt(
-        "Custos 認証\n\nCernere の access token を貼り付けてください。\n(CUSTOS_OPEN=1 環境では任意の文字列で OK)",
+        "Custos 認証 (401)\n\n"
+            + "Cernere の access token を貼り付けてください。\n"
+            + "Cernere 不使用なら backend を CUSTOS_OPEN=1 で立てるか、\n"
+            + "そもそも CERNERE_URL を設定しない (= 認証不要モード) のが既定。",
         cur,
     );
     if (next != null) setToken(next.trim());

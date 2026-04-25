@@ -64,6 +64,15 @@ export function buildFrontendApp({ backendUrl }: FrontendDeps) {
     const app = new Hono();
     app.use("*", honoLogger());
 
+    // 開発時はキャッシュ無効化 (ブラウザに古い app.js が残るとデバッグが
+    // 噛み合わなくなるため)。production で外部 CDN に乗せるならこのヘッダ
+    // は外す前提だが、Custos は dev box ローカルツールなので no-store 固定。
+    app.use("*", async (c, next) => {
+        await next();
+        c.header("Cache-Control", "no-store, no-cache, must-revalidate");
+        c.header("Pragma",        "no-cache");
+    });
+
     // /config.js — ブラウザに backend URL を渡す。index.html から先読みする。
     app.get("/config.js", (c) => c.text(
         `window.__CUSTOS_BACKEND__ = ${JSON.stringify(backendUrl)};\n`,

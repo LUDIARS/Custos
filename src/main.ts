@@ -30,9 +30,35 @@ const HOST          = process.env.CUSTOS_HOST ?? "0.0.0.0";
 const BACKEND_URL_FOR_BROWSER = process.env.CUSTOS_BACKEND_URL
     ?? `http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${BACKEND_PORT}`;
 
+// 子プロセス由来の例外がメインを落とさないようにグローバル安全網を張る。
+// ただし bind エラー (EADDRINUSE) や起動時に出るエラーは exit すべきなので、
+// `started` フラグが立つまでは fail-fast、立った後は継続する。
+let started = false;
+process.on("uncaughtException", (err: Error & { code?: string }) => {
+    if (!started || err.code === "EADDRINUSE") {
+        logger.error({ err }, "fatal during startup");
+        process.exit(1);
+    }
+    logger.error({ err }, "uncaughtException — server continues");
+});
+process.on("unhandledRejection", (reason) => {
+    if (!started) {
+        logger.error({ reason: String(reason) }, "fatal during startup (rejection)");
+        process.exit(1);
+    }
+    logger.error({ reason: String(reason) }, "unhandledRejection — server continues");
+});
+
 async function main() {
     const cfg = loadAppsConfig();
-    logger.info({ apps: cfg.apps.length }, "apps config loaded");
+    const authMode = process.env.CUSTOS_OPEN === "1"
+        ? "open (CUSTOS_OPEN=1)"
+        : process.env.CERNERE_URL
+            ? `cernere (${process.env.CERNERE_URL})`
+            : process.env.CUSTOS_AUTH_REQUIRED === "1"
+                ? "stub (token required)"
+                : "anonymous (no auth)";
+    logger.info({ apps: cfg.apps.length, authMode }, "apps config loaded");
 
     const registry = new AppsRegistry(cfg.apps);
     const runner   = new AppsRunner(registry);
@@ -57,6 +83,10 @@ async function main() {
             host: info.address, port: info.port,
             backendForBrowser: BACKEND_URL_FOR_BROWSER,
         }, "frontend listening");
+        started = true;       // bind 成功後は uncaughtException で死なない
+        // ブラウザで開く URL を判りやすく出す。
+        // eslint-disable-next-line no-console
+        console.log(`\n  ▶ Open Custos: http://localhost:${info.port}/\n`);
     });
 
     const shutdown = (sig: NodeJS.Signals) => {
