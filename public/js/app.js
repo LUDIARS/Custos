@@ -18,41 +18,27 @@ const API = `${BACKEND}/api`;
 const TOKEN_KEY = "custos.token";
 
 // ─── auth ──────────────────────────────────────
+//
+// 既定で **token ダイアログは出さない** 運用。Custos backend は CUSTOS_OPEN=1
+// または CERNERE_URL 未設定 (= anonymous) で立てる前提で、フロントから
+// token を要求する場面がない。Cernere 認証を有効にしたい場合のみ
+// `sessionStorage.setItem("custos.token", "<jwt>")` を DevTools 等から
+// 直接セットして使う (ダイアログでは案内しない)。
 
-export function getToken() {
+function getToken() {
     return sessionStorage.getItem(TOKEN_KEY) ?? "";
-}
-function setToken(t) {
-    if (t) sessionStorage.setItem(TOKEN_KEY, t);
-    else   sessionStorage.removeItem(TOKEN_KEY);
 }
 export async function apiFetch(path, opts = {}) {
     const headers = { "content-type": "application/json", ...(opts.headers ?? {}) };
     const tok = getToken();
     if (tok) headers["authorization"] = `Bearer ${tok}`;
-    const res = await fetch(API + path, { ...opts, headers, mode: "cors" });
-    if (res.status === 401) {
-        promptToken();
-        throw new Error("unauthorized");
-    }
-    return res;
+    return await fetch(API + path, { ...opts, headers, mode: "cors" });
 }
 /** WebSocket 用の base URL (`ws://...` / `wss://...`)。 */
 export function wsBase() {
     if (BACKEND) return BACKEND.replace(/^http/, "ws");
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
     return `${proto}//${location.host}`;
-}
-function promptToken() {
-    const cur = getToken();
-    const next = window.prompt(
-        "Custos 認証 (401)\n\n"
-            + "Cernere の access token を貼り付けてください。\n"
-            + "Cernere 不使用なら backend を CUSTOS_OPEN=1 で立てるか、\n"
-            + "そもそも CERNERE_URL を設定しない (= 認証不要モード) のが既定。",
-        cur,
-    );
-    if (next != null) setToken(next.trim());
 }
 
 // ─── DOM refs ──────────────────────────────────
@@ -85,8 +71,9 @@ const state = {
 
 // ─── boot ───────────────────────────────────────
 async function boot() {
-    // token 入力 prompt は upfront に出さず、401 を受けてから出す。
-    // CERNERE_URL 未設定 / CUSTOS_OPEN=1 の運用ではそもそも token 不要。
+    // token ダイアログは出さない。Custos の標準運用は CUSTOS_OPEN=1 で
+    // backend を立てるか、CERNERE_URL を設定しない anonymous モード。
+    // どちらも token 不要なので、UI からの入力導線も持たない。
     await loadApps();
     appSelect.addEventListener("change", onAppChange);
     btnBuild.addEventListener("click", () => apiAction("build"));
