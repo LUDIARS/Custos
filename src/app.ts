@@ -35,7 +35,19 @@ export function buildBackendApp({ registry, runner, broker }: BackendDeps) {
     const app = new Hono();
 
     app.use("*", honoLogger());
-    app.use("*", cors({ origin: process.env.CORS_ORIGIN ?? "*", credentials: true }));
+    // CORS: frontend (4649) と backend (7676) の origin が違うので必須。
+    // credentials:true + origin:"*" の組合せはブラウザに拒否される
+    // (Access-Control-Allow-Origin: * と Access-Control-Allow-Credentials: true
+    // が同居できない仕様)。CORS_ORIGIN 未設定時は credentials OFF にする。
+    // Bearer ヘッダだけで認証しているので Cookie は不要。
+    const corsOrigin = process.env.CORS_ORIGIN ?? "*";
+    const useCredentials = corsOrigin !== "*" && corsOrigin !== "";
+    app.use("*", cors({
+        origin:       corsOrigin,
+        credentials:  useCredentials,
+        allowHeaders: ["content-type", "authorization"],
+        allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+    }));
 
     // /api/health は認証不要 (監視 / Electron readiness 用)。
     app.get("/api/health", (c) => c.json({
