@@ -57,7 +57,13 @@ const layoutEl     = document.querySelector(".layout");
 const tabs         = [...document.querySelectorAll(".tab")];
 const tabPanels    = [...document.querySelectorAll(".tab-panel")];
 const streamVideo       = $("streamVideo");
+const streamImage       = $("streamImage");
 const streamPlaceholder = $("streamPlaceholder");
+const captureMode       = $("captureMode");
+const btnSnapshot       = $("btnSnapshot");
+const btnStreamStart    = $("btnStreamStart");
+const btnStreamStop     = $("btnStreamStop");
+const btnDownload       = $("btnDownload");
 
 // ─── state ──────────────────────────────────────
 const state = {
@@ -65,20 +71,34 @@ const state = {
     appId:   null,
     ws:      null,
     selectedConfig: null,
-    captureSessionId: null,
+    captureSessionId: null,    // WebRTC session (if streaming)
+    lastShotUrl: null,         // blob: URL for the latest snapshot (for download)
 };
+const CAPTURE_MODE_KEY = "custos.captureMode";
 
 // ─── boot ───────────────────────────────────────
 async function boot() {
     // token ダイアログは出さない。Custos の標準運用は CUSTOS_OPEN=1 で
     // backend を立てるか、CERNERE_URL を設定しない anonymous モード。
-    // どちらも token 不要なので、UI からの入力導線も持たない。
     await loadApps();
     appSelect.addEventListener("change", onAppChange);
     btnBuild.addEventListener("click", () => apiAction("build"));
     btnRun  .addEventListener("click", () => apiAction("run"));
     btnTest .addEventListener("click", () => apiAction("test"));
     btnKill .addEventListener("click", () => apiAction("kill"));
+
+    // Capture mode: localStorage に保存しておくのでセッション越しに記憶
+    captureMode.value = localStorage.getItem(CAPTURE_MODE_KEY) ?? "snapshot";
+    captureMode.addEventListener("change", () => {
+        localStorage.setItem(CAPTURE_MODE_KEY, captureMode.value);
+        applyCaptureMode();
+    });
+    applyCaptureMode();
+
+    btnSnapshot   .addEventListener("click", takeSnapshot);
+    btnStreamStart.addEventListener("click", () => startCapture(state.appId));
+    btnStreamStop .addEventListener("click", () => teardownCapture());
+
     overlayToggle.addEventListener("change", () => {
         layoutEl.classList.toggle("overlay", overlayToggle.checked);
     });
@@ -88,6 +108,25 @@ async function boot() {
     });
     for (const t of tabs) t.addEventListener("click", () => switchTab(t.dataset.tab));
     connectWs();
+}
+
+function applyCaptureMode() {
+    const m = captureMode.value;
+    btnSnapshot   .hidden = m !== "snapshot";
+    btnStreamStart.hidden = m !== "webrtc";
+    btnStreamStop .hidden = m !== "webrtc";
+    // モード切替時は対向側の表示を畳む
+    if (m === "snapshot") {
+        teardownCapture().catch(() => {});
+        streamVideo.classList.remove("active");
+    } else {
+        streamImage.classList.remove("active");
+        if (state.lastShotUrl) URL.revokeObjectURL(state.lastShotUrl);
+        state.lastShotUrl = null;
+        btnDownload.hidden = true;
+    }
+    streamPlaceholder.style.display =
+        (streamVideo.classList.contains("active") || streamImage.classList.contains("active")) ? "none" : "";
 }
 
 async function loadApps() {
@@ -138,11 +177,49 @@ async function onAppChange() {
     // 既存の capture を畳む
     await teardownCapture();
     streamVideo.classList.remove("active");
+    streamImage.classList.remove("active");
+    if (state.lastShotUrl) { URL.revokeObjectURL(state.lastShotUrl); state.lastShotUrl = null; }
+    btnDownload.hidden = true;
     streamPlaceholder.style.display = "";
 
     if (state.appId) {
         applyStatus(state.apps.find((a) => a.config.id === id)?.status ?? null);
         wsSend({ type: "subscribe", appId: state.appId });
+    }
+}
+
+async function takeSnapshot() {
+    if (!state.appId) {
+        appendLog({ kind: "meta", stream: "stderr", text: "[snapshot] アプリ未選択\n" });
+        return;
+    }
+    btnSnapshot.disabled = true;
+    try {
+        const res = await apiFetch(`/apps/${encodeURIComponent(state.appId)}/screenshot`, { method: "POST" });
+        if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            appendLog({ kind: "meta", stream: "stderr",
+                text: `[snapshot] HTTP ${res.status} ${j.error ?? ""}\n` });
+            return;
+        }
+        const blob = await res.blob();
+        // 古い blob URL は revoke して GC を助ける
+        if (state.lastShotUrl) URL.revokeObjectURL(state.lastShotUrl);
+        const url = URL.createObjectURL(blob);
+        state.lastShotUrl = url;
+        streamImage.src = url;
+        streamImage.classList.add("active");
+        streamVideo.classList.remove("active");
+        streamPlaceholder.style.display = "none";
+        btnDownload.href = url;
+        btnDownload.download = `custos-${state.appId}-${Date.now()}.png`;
+        btnDownload.hidden = false;
+        appendLog({ kind: "meta", stream: "stdout", text: `[snapshot] ${(blob.size / 1024).toFixed(1)} KB\n` });
+    } catch (err) {
+        appendLog({ kind: "meta", stream: "stderr",
+            text: `[snapshot] error: ${err.message ?? err}\n` });
+    } finally {
+        btnSnapshot.disabled = false;
     }
 }
 
@@ -156,12 +233,9 @@ function applyStatus(status) {
     statusPill.textContent = status.lifecycle + (status.pid ? ` · pid ${status.pid}` : "");
     updateActionButtons();
 
-    // running 遷移時に capture を試みる (capture 設定がある場合のみ)
-    if (status.lifecycle === "running" && state.selectedConfig?.capture && !state.captureSessionId) {
-        startCapture(status.id).catch((err) => {
-            appendLog({ kind: "meta", stream: "stderr", text: `[capture] ${err.message ?? err}\n` });
-        });
-    } else if (status.lifecycle !== "running" && state.captureSessionId) {
+    // running から外れたら WebRTC セッションだけ畳む。capture 開始は **常に
+    // 手動** (Snapshot ボタンか Stream Start ボタン)。
+    if (status.lifecycle !== "running" && state.captureSessionId) {
         teardownCapture().catch(() => {});
     }
 }
@@ -247,6 +321,20 @@ async function apiAction(kind) {
 // ─── capture (WebRTC) ─────────────────────────
 
 async function startCapture(appId) {
+    if (!appId) {
+        appendLog({ kind: "meta", stream: "stderr", text: "[capture] アプリ未選択\n" });
+        return;
+    }
+    if (!state.selectedConfig?.capture) {
+        appendLog({ kind: "meta", stream: "stderr",
+            text: "[capture] capture 設定が無いアプリです (apps.json の capture セクションを追加)\n" });
+        return;
+    }
+    if (state.captureSessionId) {
+        appendLog({ kind: "meta", stream: "stdout", text: "[capture] 既に streaming 中\n" });
+        return;
+    }
+    btnStreamStart.disabled = true;
     try {
         const sessionId = await connectWebRTC({
             appId,
@@ -256,9 +344,12 @@ async function startCapture(appId) {
         });
         state.captureSessionId = sessionId;
         streamVideo.classList.add("active");
+        streamImage.classList.remove("active");
         streamPlaceholder.style.display = "none";
     } catch (err) {
         appendLog({ kind: "meta", stream: "stderr", text: `[capture] start failed: ${err.message ?? err}\n` });
+    } finally {
+        btnStreamStart.disabled = false;
     }
 }
 

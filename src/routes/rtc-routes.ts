@@ -12,6 +12,7 @@
 import { Hono } from "hono";
 import type { AppsRegistry } from "../apps/registry.js";
 import type { WebRTCBroker } from "../capture/webrtc-broker.js";
+import { captureScreenshot } from "../capture/screenshot.js";
 
 export interface RtcRoutesDeps {
     registry: AppsRegistry;
@@ -20,6 +21,31 @@ export interface RtcRoutesDeps {
 
 export function createRtcRoutes({ registry, broker }: RtcRoutesDeps) {
     const r = new Hono();
+
+    /// POST /api/apps/:id/screenshot
+    /// 単発スクリーンショット。レスポンスは image/png バイナリ。
+    /// リアルタイム配信 (rtc/*) と独立しているのでどちらでも使える。
+    r.post("/:id/screenshot", async (c) => {
+        const id  = c.req.param("id");
+        const cfg = registry.getConfig(id);
+        if (!cfg) return c.json({ error: "unknown app" }, 404);
+        if (!cfg.capture) return c.json({ error: "app has no capture config" }, 400);
+
+        try {
+            const { png } = await captureScreenshot(cfg);
+            return new Response(png, {
+                status: 200,
+                headers: {
+                    "content-type":  "image/png",
+                    "content-length": String(png.length),
+                    "cache-control": "no-store",
+                },
+            });
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            return c.json({ ok: false, error: msg }, 500);
+        }
+    });
 
     /** POST /api/apps/:id/rtc/offer { sdp } → { sessionId, sdp, type } */
     r.post("/:id/rtc/offer", async (c) => {

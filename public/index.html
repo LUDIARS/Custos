@@ -25,11 +25,26 @@
 
     <!-- ─── 配信領域 ─────────────────────────────── -->
     <section class="stream-area" aria-label="アプリ画面">
+      <div class="stream-toolbar">
+        <label class="capture-mode-label">
+          Capture
+          <select id="captureMode" aria-label="キャプチャモード">
+            <option value="snapshot">Snapshot</option>
+            <option value="webrtc">Realtime (WebRTC)</option>
+          </select>
+        </label>
+        <span class="stream-toolbar-spacer"></span>
+        <button id="btnSnapshot"     class="ghost capture-action mode-snapshot" type="button" title="1 フレーム撮影して下に表示 (curl で /api/apps/:id/screenshot を叩いても同じ PNG が取れる)">📷 Capture</button>
+        <button id="btnStreamStart"  class="ghost capture-action mode-webrtc"   type="button" hidden>▶ Stream</button>
+        <button id="btnStreamStop"   class="ghost capture-action mode-webrtc"   type="button" hidden>⏹ Stop</button>
+        <a id="btnDownload" class="ghost capture-action" href="#" download hidden>⬇ Download</a>
+      </div>
       <div class="stream-frame" id="streamFrame">
         <video id="streamVideo" autoplay playsinline muted></video>
+        <img   id="streamImage" alt="latest screenshot" />
         <div class="stream-placeholder" id="streamPlaceholder">
-          <div class="ph-title">No stream yet</div>
-          <div class="ph-hint">Run のあと WebRTC 接続が確立されると映像が出ます。capture 設定が無い app は表示されません</div>
+          <div class="ph-title">No capture yet</div>
+          <div class="ph-hint">Snapshot モード: 上の「📷 Capture」を押すと 1 フレーム取得 / Realtime: 「▶ Stream」で WebRTC を開始</div>
         </div>
       </div>
     </section>
