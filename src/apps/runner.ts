@@ -12,6 +12,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
+import { resolve as pathResolve, isAbsolute as pathIsAbsolute } from "node:path";
 import type { AppConfig, CmdConfig } from "../config/apps-config.js";
 import type { AppsRegistry } from "./registry.js";
 import type { RunnerKind, AppLifecycle } from "../shared/types.js";
@@ -31,6 +32,10 @@ interface ActiveProc {
     proc:   ChildProcess;
     /** タイムアウト用の setTimeout ハンドル。 */
     timer:  NodeJS.Timeout | null;
+    /** `kill()` から殺されたことを覚えておく (Windows の taskkill /F は
+     *  signal を渡さず exit code 1 で返るため、それだけだと "crashed" と
+     *  区別がつかない)。 */
+    killed: boolean;
 }
 
 export class AppsRunner extends EventEmitter {
@@ -68,18 +73,28 @@ export class AppsRunner extends EventEmitter {
         return this.startKind(app, "test", app.test);
     }
 
-    /** 動作中の run を SIGKILL。返り値は kill 対象が見つかったかどうか。 */
+    /** 動作中の run を SIGKILL (Windows は taskkill /T /F)。 */
     kill(appId: string): boolean {
         const inner = this.active.get(appId);
         const a = inner?.get("run");
-        if (!a) return false;
-        try {
-            // process.kill on Windows → tree.kill 使うべきだがまずは SIGKILL で素直に。
-            a.proc.kill("SIGKILL");
-        } catch (err) {
-            log.warn({ err }, "kill failed");
+        if (!a || !a.proc.pid) return false;
+        a.killed = true;     // exit handler が "killed" lifecycle に倒すため
+        if (process.platform === "win32") {
+            // Windows の Node.js process.kill は子プロセスツリーを落とさない。
+            // taskkill /T (tree) /F (force) で子孫まとめて殺す。
+            try {
+                spawn("taskkill", ["/PID", String(a.proc.pid), "/T", "/F"], {
+                    stdio: "ignore", shell: false,
+                });
+            } catch (err) {
+                log.warn({ err }, "taskkill failed; falling back to proc.kill");
+                try { a.proc.kill("SIGKILL"); } catch { /* ignore */ }
+            }
+        } else {
+            try { a.proc.kill("SIGKILL"); } catch (err) {
+                log.warn({ err }, "kill failed");
+            }
         }
-        // 状態は exit ハンドラが拾う
         return true;
     }
 
@@ -102,16 +117,30 @@ export class AppsRunner extends EventEmitter {
         }
 
         const opId = randomUUID();
-        log.info({ appId: app.id, kind, opId, cwd: cfg.cwd, cmd: cfg.cmd }, "spawn");
 
-        // shell: false の方が安全だが、cmd に空白入りパスや shell 構文が混じる
-        // ことがあるので shell: true で起動する。`cmd` + `args` は空白 join される。
-        const argsStr = cfg.args.length > 0 ? " " + cfg.args.map(quoteArg).join(" ") : "";
-        const proc = spawn(cfg.cmd + argsStr, [], {
+        // Windows + shell:true の cmd.exe は **cwd 内の exe を勝手に探さない**
+        // ため、`adventurecube.exe` のような bare ファイル名 + `cwd: build/Debug`
+        // で実行しようとすると "認識されていません" で exit 1 になる。
+        // bare ファイル名で .exe / .bat / .cmd / .com 拡張子の場合は cwd
+        // 基準の絶対パスへ昇格する。bash 系 (Linux/macOS) は cwd の `./` も
+        // 同じく PATH に乗らないので同様に扱う。
+        const resolvedCmd = resolveBareExe(cfg.cmd, cfg.cwd);
+        log.info({ appId: app.id, kind, opId, cwd: cfg.cwd, cmd: resolvedCmd, raw: cfg.cmd }, "spawn");
+
+        // shell:false で直接 exe を起動する。理由:
+        //   1. shell:true (= cmd.exe 経由) だと kill が cmd.exe にしか届かず、
+        //      子の exe が孤児化して残る (今回の AC kill 問題そのもの)
+        //   2. PATH / 拡張子解決の謎挙動を排除できる (cwd の exe は resolve
+        //      ヘルパで絶対パスに昇格済みのため shell 補助は不要)
+        //   3. クォーティング不要、引数は配列のまま渡せる
+        // shell トリック (パイプ・リダイレクト等) を使いたい人は cmd を
+        // `cmd /c "..."` として書く運用にする (cmd.cmd 側で明示)。
+        const proc = spawn(resolvedCmd, cfg.args, {
             cwd:   cfg.cwd,
             env:   { ...process.env, ...cfg.env },
-            shell: true,
+            shell: false,
             stdio: ["ignore", "pipe", "pipe"],
+            windowsHide: true,
         });
 
         const reg = this.registry;
@@ -128,7 +157,7 @@ export class AppsRunner extends EventEmitter {
         proc.stdout?.on("data", (chunk: Buffer) => this.emitLines(app.id, kind, "stdout", chunk));
         proc.stderr?.on("data", (chunk: Buffer) => this.emitLines(app.id, kind, "stderr", chunk));
 
-        const active: ActiveProc = { kind, opId, proc, timer: null };
+        const active: ActiveProc = { kind, opId, proc, timer: null, killed: false };
 
         if (cfg.timeoutSec && cfg.timeoutSec > 0) {
             active.timer = setTimeout(() => {
@@ -149,7 +178,8 @@ export class AppsRunner extends EventEmitter {
             // "idle" に戻すことで UI 上 "built" と視覚的に分ける。
             let nextLifecycle: AppLifecycle = lifecycleNormal;
             if (kind === "run") {
-                if (signal === "SIGKILL" || signal === "SIGTERM") nextLifecycle = "killed";
+                if (active.killed)                                 nextLifecycle = "killed";
+                else if (signal === "SIGKILL" || signal === "SIGTERM") nextLifecycle = "killed";
                 else if (typeof code === "number" && code !== 0)  nextLifecycle = "crashed";
             }
             if (kind === "build" && typeof code === "number" && code !== 0) {
@@ -189,4 +219,23 @@ export class AppsRunner extends EventEmitter {
 function quoteArg(s: string): string {
     if (/^[\w./\\:=+-]+$/.test(s)) return s;
     return `"${s.replace(/"/g, '\\"')}"`;
+}
+
+/**
+ * cmd が「bare な実行ファイル名」(パス区切り無し + 拡張子あり) なら、
+ * cwd 基準の絶対パスへ昇格する。`adventurecube.exe` を `cwd: build/Debug`
+ * で起動しようとして cmd.exe が PATH 内にしか目を向けないために
+ * "認識されていません" になる事故の防止。
+ *
+ * - 既に絶対パス (`C:\..` / `/...`) → そのまま
+ * - 既にパス区切りを含む (`./foo` / `bin/foo`) → そのまま
+ * - cmake / npm / git 等の PATH 上のコマンド (拡張子無し) → そのまま
+ *
+ * 拡張子が `.exe` / `.bat` / `.cmd` / `.com` のときだけ昇格対象とする。
+ */
+export function resolveBareExe(cmd: string, cwd: string): string {
+    if (pathIsAbsolute(cmd)) return cmd;
+    if (cmd.includes("/") || cmd.includes("\\")) return cmd;
+    if (!/\.(exe|bat|cmd|com)$/i.test(cmd)) return cmd;
+    return pathResolve(cwd, cmd);
 }
