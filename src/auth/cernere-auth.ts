@@ -39,19 +39,32 @@ export class CernereAuth {
 
     /**
      * トークンを Cernere で検証し VerifiedUser を返す。失敗時は null。
-     * `CUSTOS_OPEN=1` のときは検証をスキップして anonymous user を返す。
+     *
+     * モード判定:
+     *   - `CUSTOS_OPEN=1` → 検証スキップ (anonymous)
+     *   - `CERNERE_URL` 未設定 → 認証不要モード (anonymous を返す)
+     *   - `CERNERE_URL` セット + `CUSTOS_AUTH_REQUIRED=1` 任意で stub 強制
+     *   - `CERNERE_URL` セット → Cernere の `/api/auth/verify` を叩く
+     *
+     * 「Cernere 不使用」運用 (env を何も設定しない) では認証なしで使える。
+     * `CUSTOS_AUTH_REQUIRED=1` を立てると CERNERE_URL 未設定下でも token
+     * 非空チェックが効くようになる (Phase 1 互換)。
      */
     async verify(token: string): Promise<VerifiedUser | null> {
         if (process.env.CUSTOS_OPEN === "1") {
             return { id: "dev-anon", name: "dev", email: "dev@local", role: "general" };
         }
-        if (!token) return null;
         if (!this.enabled) {
-            // CERNERE_URL 未設定: トークン非空なら通す stub (Phase 1 互換動作)。
-            return token.length > 0
-                ? { id: "stub", name: "stub", email: "stub@local", role: "general" }
-                : null;
+            // CERNERE_URL 未設定: 既定で完全オープン (anonymous を返す)。
+            // 厳格運用は `CUSTOS_AUTH_REQUIRED=1` で stub モードに戻す。
+            if (process.env.CUSTOS_AUTH_REQUIRED === "1") {
+                return token.length > 0
+                    ? { id: "stub", name: "stub", email: "stub@local", role: "general" }
+                    : null;
+            }
+            return { id: "anon", name: "anon", email: "anon@local", role: "general" };
         }
+        if (!token) return null;
 
         const cached = this.cache.get(token);
         if (cached && cached.expiresAt > Date.now()) return cached.user;

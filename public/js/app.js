@@ -82,7 +82,8 @@ const state = {
 
 // ─── boot ───────────────────────────────────────
 async function boot() {
-    if (!getToken()) promptToken();
+    // token 入力 prompt は upfront に出さず、401 を受けてから出す。
+    // CERNERE_URL 未設定 / CUSTOS_OPEN=1 の運用ではそもそも token 不要。
     await loadApps();
     appSelect.addEventListener("change", onAppChange);
     btnBuild.addEventListener("click", () => apiAction("build"));
@@ -101,8 +102,17 @@ async function boot() {
 }
 
 async function loadApps() {
+    appSelect.innerHTML = "";
+    appSelect.appendChild(opt("", "— 起動対象を読み込み中… —"));
     try {
         const res = await apiFetch(`/apps`);
+        if (!res.ok) {
+            appendLog({ kind: "meta", stream: "stderr",
+                text: `[custos] /api/apps HTTP ${res.status} — backend (${BACKEND || location.origin}) との通信に失敗。CUSTOS_OPEN=1 で立ち上げているか確認、もしくは認証 token を入れ直してください。\n` });
+            appSelect.innerHTML = "";
+            appSelect.appendChild(opt("", "— 取得失敗 —"));
+            return;
+        }
         const json = await res.json();
         state.apps = json.apps ?? [];
         appSelect.innerHTML = "";
@@ -111,10 +121,17 @@ async function loadApps() {
             appSelect.appendChild(opt(a.config.id, `${a.config.name} (${a.config.target})`));
         }
         if (state.apps.length === 0) {
-            appendLog({ kind: "meta", stream: "stdout", text: "config/apps.json にアプリが定義されていません。\n" });
+            appendLog({ kind: "meta", stream: "stderr",
+                text: `[custos] apps.json にアプリが 0 件です。CUSTOS_APPS_FILE / cwd を確認してください。`
+                    + ` backend が見ているのは: ${BACKEND || "(same-origin)"} です。\n` });
+        } else {
+            appendLog({ kind: "meta", stream: "stdout", text: `[custos] ${state.apps.length} apps loaded\n` });
         }
     } catch (err) {
-        appendLog({ kind: "meta", stream: "stderr", text: `[custos] /api/apps fetch failed: ${err.message ?? err}\n` });
+        appendLog({ kind: "meta", stream: "stderr",
+            text: `[custos] /api/apps fetch error: ${err.message ?? err} (backend ${BACKEND || "(same-origin)"})\n` });
+        appSelect.innerHTML = "";
+        appSelect.appendChild(opt("", "— 取得失敗 —"));
     }
 }
 
@@ -268,9 +285,10 @@ async function teardownCapture() {
 // ─── WS ─────────────────────────────────────────
 
 function connectWs() {
+    // token は空でも繋ぐ。Cernere 不使用 (anonymous mode) なら backend が
+    // 何も要求しない。401 / 4401 で close されたら setToken 経由で再接続。
     const tok = getToken();
-    if (!tok) return;       // promptToken が呼ばれた後に再接続される
-    const url = `${wsBase()}/ws?token=${encodeURIComponent(tok)}`;
+    const url = `${wsBase()}/ws${tok ? `?token=${encodeURIComponent(tok)}` : ""}`;
     const ws = new WebSocket(url);
     state.ws = ws;
     ws.addEventListener("open", () => {

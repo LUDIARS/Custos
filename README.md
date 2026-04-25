@@ -9,10 +9,15 @@ build / run / kill し、ログとテスト結果を見ながらバーチャル�
 
 ```bash
 npm install
-CUSTOS_OPEN=1 npm run serve   # frontend http://localhost:4649/  backend http://localhost:7676/
+npm run serve     # frontend http://localhost:4649/  backend http://localhost:7676/
 # もしくは Electron で開く
-CUSTOS_OPEN=1 npm run start
+npm run start
 ```
+
+**`CERNERE_URL` 未設定 = 認証不要モード** が既定。Cernere を使う場合は
+`CERNERE_URL=http://localhost:8080` を立ててから起動 (token プロンプトが
+401 受信時に出る)。Cernere 不使用環境で「token 入力を強制する」運用なら
+`CUSTOS_AUTH_REQUIRED=1` を併設。
 
 - **Frontend**: http://localhost:4649/ (静的 + `/config.js` で backend URL を注入)
 - **Backend**:  http://localhost:7676/ (API + WS)
@@ -113,7 +118,8 @@ tests/
 | `CUSTOS_BACKEND_URL`     | (auto) | ブラウザに注入される backend URL |
 | `CUSTOS_HOST`            | 0.0.0.0 | bind |
 | `CUSTOS_APPS_FILE`       | config/apps.json | 設定パス |
-| `CUSTOS_OPEN`            | (off) | "1" で REST + WS 認証スキップ |
+| `CUSTOS_OPEN`            | (off) | "1" で REST + WS 認証完全スキップ (anonymous user) |
+| `CUSTOS_AUTH_REQUIRED`   | (off) | CERNERE_URL 未設定でも token 非空チェックを要求 |
 | `CORS_ORIGIN`            | *    | CORS allow (frontend と backend が別 origin) |
 | `CUSTOS_FFMPEG`          | "ffmpeg" | キャプチャ用 ffmpeg 実行ファイル |
 | `CUSTOS_ADB`             | "adb" | Android 入力用 adb 実行ファイル |
