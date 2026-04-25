@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "apps": [
+    {
+      "id": "pictor-mobile-demo",
+      "name": "Pictor Mobile Demo",
+      "description": "Pictor の mobile pipeline simulation (headless console)。ライフサイクル / プロファイル切替の確認用。",
+      "target": "desktop",
+      "build": {
+        "cwd": "E:/Document/Ars/Pictor",
+        "cmd": "cmake",
+        "args": ["--build", "build", "--config", "Debug", "--target", "pictor_mobile_demo"],
+        "timeoutSec": 600
+      },
+      "run": {
+        "cwd": "E:/Document/Ars/Pictor",
+        "cmd": "build/Debug/pictor_mobile_demo.exe",
+        "args": ["--profile=MobileLow", "--frames=120"]
+      },
+      "test": {
+        "cwd": "E:/Document/Ars/Pictor",
+        "cmd": "ctest",
+        "args": ["-C", "Debug", "--output-on-failure"]
+      },
+      "capture": {
+        "type": "window",
+        "windowTitle": "Pictor",
+        "fps": 30,
+        "preset": "veryfast"
+      },
+      "input": {
+        "buttons": [
+          { "label": "Pause",  "key": "Space" },
+          { "label": "Resume", "key": "Space" },
+          { "label": "Switch Profile", "key": "P" },
+          { "label": "Quit",   "action": "kill" }
+        ],
+        "allowKeyboard": true,
+        "allowMouse": false
+      },
+      "logs": { "stdout": true, "stderr": true, "files": [] }
+    },
+    {
+      "id": "ergo-bench-curve",
+      "name": "Ergo Bench — Curve",
+      "description": "Ergo の curve.bake / curve.evaluate ベンチマーク。コンソール出力のみ。",
+      "target": "desktop",
+      "build": {
+        "cwd": "E:/Document/Ars/Ergo",
+        "cmd": "cmake",
+        "args": ["--build", "build", "--config", "Release", "--target", "bench_curve"],
+        "timeoutSec": 300
+      },
+      "run": {
+        "cwd": "E:/Document/Ars/Ergo",
+        "cmd": "build/Release/bench_curve.exe"
+      },
+      "input": {
+        "buttons": [
+          { "label": "Quit", "action": "kill" }
+        ],
+        "allowKeyboard": false,
+        "allowMouse": false
+      }
+    }
+  ]
+}

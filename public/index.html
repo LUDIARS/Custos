@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Custos — Remote Test Runner</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="title">CUSTOS <span class="subtitle">remote test runner</span></div>
+    <div class="header-controls">
+      <select id="appSelect" aria-label="アプリ選択">
+        <option value="">— 起動対象を選択 —</option>
+      </select>
+      <button id="btnBuild" class="action build" disabled>Build</button>
+      <button id="btnRun"   class="action run"   disabled>Run</button>
+      <button id="btnTest"  class="action test"  disabled>Test</button>
+      <button id="btnKill"  class="action kill"  disabled>Kill</button>
+      <span class="status-pill" id="statusPill" data-state="idle">idle</span>
+    </div>
+  </header>
+
+  <main class="layout">
+
+    <!-- ─── 配信領域 ─────────────────────────────── -->
+    <section class="stream-area" aria-label="アプリ画面">
+      <div class="stream-frame" id="streamFrame">
+        <video id="streamVideo" autoplay playsinline muted></video>
+        <div class="stream-placeholder" id="streamPlaceholder">
+          <div class="ph-title">No stream yet</div>
+          <div class="ph-hint">Run のあと WebRTC 接続が確立されると映像が出ます (Phase 2 実装予定)</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── 仮想キー領域 (広め) ─────────────────── -->
+    <section class="virtual-keys" aria-label="バーチャルキー">
+      <div class="vk-toolbar">
+        <span class="vk-label">Virtual Keys</span>
+        <span class="vk-hint">アプリに直接入力されます</span>
+      </div>
+      <div class="vk-grid" id="vkGrid">
+        <!-- ボタンは app の input.buttons から生成 -->
+        <div class="vk-empty">アプリを選択するとバーチャルキーが表示されます。</div>
+      </div>
+    </section>
+
+    <!-- ─── ログ / テスト タブ ────────────────────── -->
+    <section class="output-area" aria-label="ログ・テスト出力">
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-tab="logs"  role="tab" aria-selected="true"  id="tabLogs">Logs</button>
+        <button class="tab"        data-tab="tests" role="tab" aria-selected="false" id="tabTests">Tests</button>
+        <div class="tabs-spacer"></div>
+        <label class="overlay-toggle">
+          <input type="checkbox" id="overlayToggle">
+          オーバーレイ表示
+        </label>
+        <button id="btnClearOutput" class="ghost">Clear</button>
+      </div>
+      <div class="tab-panel active" data-tab="logs"  id="panelLogs">
+        <pre class="log-stream" id="logStream"></pre>
+      </div>
+      <div class="tab-panel"        data-tab="tests" id="panelTests">
+        <pre class="log-stream" id="testStream"></pre>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="app-footer">
+    <span id="wsStatus" class="ws-status disconnected">WS disconnected</span>
+    <span class="grow"></span>
+    <span class="hint">Custos v0.1.0 — Cernere 認証 / WebRTC キャプチャは Phase 2</span>
+  </footer>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>
