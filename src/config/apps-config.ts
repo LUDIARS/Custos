@@ -12,15 +12,40 @@ import { resolve } from "node:path";
 
 // ─── Schemas ────────────────────────────────────────────────
 
+/// build / run / test それぞれの実行コマンド設定。
+///
+/// **作業ディレクトリ (working directory)** は build / run / test ごとに
+/// 個別に指定できる。`workingDir` (推奨) と `cwd` (旧名・互換) のどちらか
+/// 1 つを書く。両方書かれた場合は workingDir を優先。
+///
+/// `cmd` は次のいずれか:
+///   - bare な実行ファイル名 (`adventurecube.exe` など) → workingDir 直下
+///     の実体に解決される (`runner.ts:resolveBareExe`)。Windows で cmd.exe
+///     経由だと PATH しか見ない問題の回避策
+///   - 相対パス (`build/Debug/foo.exe`) → workingDir 起点で解決
+///   - 絶対パス (`C:/tools/foo.exe`) → そのまま
+///   - PATH 上のコマンド (`cmake` / `npm` / `git`) → spawn の解決に任せる
 const cmdSchema = z.object({
-    cwd: z.string().min(1),
+    /** 作業ディレクトリ (working directory)。子プロセスの cwd に渡す。 */
+    workingDir: z.string().min(1).optional(),
+    /** workingDir の旧名 (alias、互換のため残す)。 */
+    cwd:        z.string().min(1).optional(),
     cmd: z.string().min(1),
     args: z.array(z.string()).default([]),
     /** 環境変数の上書き。実行プロセスの env にマージされる。 */
     env: z.record(z.string()).default({}),
     /** タイムアウト (秒)。0/undefined は無制限。 */
     timeoutSec: z.number().int().nonnegative().optional(),
-});
+})
+    .refine((v) => Boolean(v.workingDir || v.cwd), {
+        message: "workingDir (or legacy `cwd`) is required",
+        path:    ["workingDir"],
+    })
+    .transform((v) => {
+        // workingDir / cwd を統合。runner からは常に `cwd` を見れば良い。
+        const dir = v.workingDir ?? v.cwd ?? "";
+        return { ...v, workingDir: dir, cwd: dir };
+    });
 
 const captureSchema = z.object({
     type: z.enum(["window", "fullscreen", "android"]),
