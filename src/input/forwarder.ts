@@ -13,6 +13,7 @@
 import { childLogger } from "../shared/logger.js";
 import type { AppConfig } from "../config/apps-config.js";
 import { androidSendKey, androidSendTap } from "./android.js";
+import { sendKeyCode, keyNameToErgoCode } from "../capture/ergo-custos-client.js";
 
 const log = childLogger("input");
 
@@ -72,6 +73,23 @@ export async function sendKey(app: AppConfig, key: string, down: boolean): Promi
         if (!down) return;
         const serial = app.capture?.androidSerial;
         await androidSendKey(key, serial ? { serial } : {});
+        return;
+    }
+
+    // ergo_custos が設定されていれば、ホスト nut-js 経由ではなくアプリ内
+    // ブリッジに直接 inject する (focus 不要、低レイテンシ)。
+    if (app.ergoCustos) {
+        const code = keyNameToErgoCode(key);
+        if (code === undefined) {
+            log.warn({ key }, "unknown key name — not in ergo KeyCode table");
+            return;
+        }
+        try {
+            await sendKeyCode(app.ergoCustos, code, down);
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            log.warn({ appId: app.id, key, down, msg }, "ergo_custos key send failed");
+        }
         return;
     }
 

@@ -23,6 +23,10 @@
         "args": ["-C", "Debug", "--output-on-failure"]
       },
 
+      "ergoCustos": {
+        "host": "127.0.0.1",
+        "port": 5198
+      },
       "capture": {
         "type": "window",
         "windowTitle": "AdventureCube",
@@ -35,6 +39,10 @@
           { "label": "Back",     "key": "S" },
           { "label": "Left",     "key": "A" },
           { "label": "Right",    "key": "D" },
+          { "label": "↑",        "key": "Up" },
+          { "label": "↓",        "key": "Down" },
+          { "label": "←",        "key": "Left" },
+          { "label": "→",        "key": "Right" },
           { "label": "Jump",     "key": "Space" },
           { "label": "Attack",   "key": "J" },
           { "label": "Skill",    "key": "K" },
@@ -76,8 +84,12 @@
           { "label": "Back",      "key": "S" },
           { "label": "Left",      "key": "A" },
           { "label": "Right",     "key": "D" },
-          { "label": "Up",        "key": "E" },
-          { "label": "Down",      "key": "Q" },
+          { "label": "Up (E)",    "key": "E" },
+          { "label": "Down (Q)",  "key": "Q" },
+          { "label": "↑",         "key": "Up" },
+          { "label": "↓",         "key": "Down" },
+          { "label": "←",         "key": "Left" },
+          { "label": "→",         "key": "Right" },
           { "label": "Wireframe", "key": "Tab" },
           { "label": "Pause",     "key": "Space" },
           { "label": "Quit",      "action": "kill" }

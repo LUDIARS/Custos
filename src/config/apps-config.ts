@@ -82,6 +82,19 @@ const logsSchema = z.object({
     files: z.array(z.string()).default([]),
 });
 
+/// ergo_custos モジュール (アプリ内 HTTP ブリッジ) の接続先。
+///
+/// 設定すると Custos backend は screenshot / key inject を **アプリ内** の
+/// HTTP エンドポイントに直接喋るようになる。ホスト ffmpeg / nut-js は経由
+/// しないので window タイトル一致や focus 取得の問題から解放される。
+///
+/// 使用には対象アプリが ergo_custos を link して
+/// `ergo::custos::start({ port: 5198 })` を呼んでいる必要がある。
+const ergoCustosSchema = z.object({
+    host: z.string().default("127.0.0.1"),
+    port: z.number().int().min(1).max(65535).default(5198),
+});
+
 export const appConfigSchema = z.object({
     id:    z.string().regex(/^[a-z0-9][a-z0-9-]*$/i, "id は英数字 + ハイフン"),
     name:  z.string().min(1),
@@ -93,6 +106,8 @@ export const appConfigSchema = z.object({
     run:     cmdSchema,
     test:    cmdSchema.optional(),
     capture: captureSchema.optional(),
+    /** 設定するとアプリ内の ergo_custos HTTP ブリッジが優先される。 */
+    ergoCustos: ergoCustosSchema.optional(),
     input:   inputSchema.default({ buttons: [], allowKeyboard: true, allowMouse: false }),
     logs:    logsSchema.default({ stdout: true, stderr: true, files: [] }),
 });

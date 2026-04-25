@@ -19,6 +19,7 @@ import { cernereAuthMiddleware } from "./auth/middleware.js";
 import type { AppsRegistry } from "./apps/registry.js";
 import type { AppsRunner }   from "./apps/runner.js";
 import type { WebRTCBroker } from "./capture/webrtc-broker.js";
+import { getResolvedEncoder } from "./capture/ffmpeg-pipeline.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -49,6 +50,13 @@ export function buildApp({ registry, runner, broker }: AppDeps) {
         service: "custos",
         version: "0.1.0",
         apps:    registry.listConfigs().length,
+    }));
+
+    // /api/video/encoder — 現在採用されている H.264 encoder を返す
+    // (`nvenc` / `qsv` / `amf` / `x264`)。初回呼び出しで probe が走る (~数秒)。
+    app.get("/api/video/encoder", (c) => c.json({
+        encoder: getResolvedEncoder(),
+        forced:  Boolean(process.env.CUSTOS_VIDEO_ENCODER),
     }));
 
     // 認証必須エンドポイント (CUSTOS_OPEN=1 で素通し)。

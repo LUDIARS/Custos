@@ -13,6 +13,8 @@ import { Hono } from "hono";
 import type { AppsRegistry } from "../apps/registry.js";
 import type { WebRTCBroker } from "../capture/webrtc-broker.js";
 import { captureScreenshot } from "../capture/screenshot.js";
+import { fetchScreenshot }   from "../capture/ergo-custos-client.js";
+import { getRtcDiagnostics } from "../capture/webrtc-broker.js";
 
 export interface RtcRoutesDeps {
     registry: AppsRegistry;
@@ -25,14 +27,28 @@ export function createRtcRoutes({ registry, broker }: RtcRoutesDeps) {
     /// POST /api/apps/:id/screenshot
     /// 単発スクリーンショット。レスポンスは image/png バイナリ。
     /// リアルタイム配信 (rtc/*) と独立しているのでどちらでも使える。
+    ///
+    /// 経路:
+    ///   1. `app.ergoCustos` が設定されていれば、アプリ内 ergo_custos
+    ///      ブリッジ (`/screenshot`) を叩く。低レイテンシ + window
+    ///      フォーカスや title マッチ無関係。
+    ///   2. それ以外は `app.capture` を使ってホスト ffmpeg gdigrab/
+    ///      x11grab/avfoundation で取る (legacy path)。
     r.post("/:id/screenshot", async (c) => {
         const id  = c.req.param("id");
         const cfg = registry.getConfig(id);
         if (!cfg) return c.json({ error: "unknown app" }, 404);
-        if (!cfg.capture) return c.json({ error: "app has no capture config" }, 400);
 
         try {
-            const { png } = await captureScreenshot(cfg);
+            let png: Buffer;
+            if (cfg.ergoCustos) {
+                png = await fetchScreenshot(cfg.ergoCustos);
+            } else if (cfg.capture) {
+                const r = await captureScreenshot(cfg);
+                png = r.png;
+            } else {
+                return c.json({ error: "app has neither ergoCustos nor capture config" }, 400);
+            }
             return new Response(png, {
                 status: 200,
                 headers: {
@@ -72,6 +88,13 @@ export function createRtcRoutes({ registry, broker }: RtcRoutesDeps) {
         if (!body.sessionId) return c.json({ error: "sessionId required" }, 400);
         const ok = broker.closeSession(body.sessionId);
         return c.json({ ok });
+    });
+
+    /// GET /api/apps/_/rtc/diagnostic
+    /// 直近 10 セッションぶんの WebRTC 診断情報を返す。映像が出ない原因の
+    /// 切り分けに使う (ffmpeg stderr / pc 状態遷移 / RTP 受信数 / SDP 行数)。
+    r.get("/_/rtc/diagnostic", (c) => {
+        return c.json({ sessions: getRtcDiagnostics() });
     });
 
     return r;
