@@ -1,5 +1,11 @@
 /**
  * Hono アプリの組み立て。HTTP サーバーは main.ts が起こす。
+ *
+ * Custos は backend (API + WS) と frontend (静的ファイル) を **別ポート**
+ * で動かす運用 (デフォルト 4649 / 7676)。frontend 側は `/config.js` で
+ * `window.__CUSTOS_BACKEND__` を注入し、ブラウザ JS は CORS 越しで
+ * backend を呼ぶ。同一プロセス内に 2 つ Hono を立てるだけなので
+ * orchestration コストはゼロ。
  */
 
 import { Hono } from "hono";
@@ -17,13 +23,15 @@ import type { WebRTCBroker } from "./capture/webrtc-broker.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-export interface BuildAppDeps {
+// ─── Backend (API + WS) ────────────────────────────────────
+
+export interface BackendDeps {
     registry: AppsRegistry;
     runner:   AppsRunner;
     broker:   WebRTCBroker;
 }
 
-export function buildApp({ registry, runner, broker }: BuildAppDeps) {
+export function buildBackendApp({ registry, runner, broker }: BackendDeps) {
     const app = new Hono();
 
     app.use("*", honoLogger());
@@ -42,9 +50,30 @@ export function buildApp({ registry, runner, broker }: BuildAppDeps) {
     app.route("/api/apps", createAppsRoutes({ registry, runner }));
     app.route("/api/apps", createRtcRoutes({ registry, broker }));
 
-    // 静的ファイル (frontend)。tsx で動かすときは src/ の隣の public/ を、
-    // dist 経由のときは <dist>/.. の public/ を見る。process.cwd() 基準にして
-    // どちらでも使えるようにする。
+    return app;
+}
+
+// ─── Frontend (static) ─────────────────────────────────────
+
+export interface FrontendDeps {
+    /** ブラウザ JS が API を叩くための backend URL。空文字なら同 origin/api。 */
+    backendUrl: string;
+}
+
+export function buildFrontendApp({ backendUrl }: FrontendDeps) {
+    const app = new Hono();
+    app.use("*", honoLogger());
+
+    // /config.js — ブラウザに backend URL を渡す。index.html から先読みする。
+    app.get("/config.js", (c) => c.text(
+        `window.__CUSTOS_BACKEND__ = ${JSON.stringify(backendUrl)};\n`,
+        200,
+        { "content-type": "application/javascript; charset=utf-8" },
+    ));
+
+    // /api/health (frontend 単体での readiness 用、backend を呼ばずに即返す)。
+    app.get("/api/health", (c) => c.json({ status: "ok", service: "custos-frontend" }));
+
     const publicRoot = resolve(__dirname, "..", "public");
     app.use("/*", serveStatic({ root: relativeFromCwd(publicRoot) }));
 
@@ -52,7 +81,6 @@ export function buildApp({ registry, runner, broker }: BuildAppDeps) {
 }
 
 function relativeFromCwd(abs: string): string {
-    // hono serve-static は cwd 相対が安定するのでここで変換する。
     const cwd = process.cwd();
     if (abs.startsWith(cwd)) {
         return "./" + abs.slice(cwd.length).replace(/^[\\/]+/, "").replace(/\\/g, "/");

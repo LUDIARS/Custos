@@ -2,9 +2,52 @@
   "version": 1,
   "apps": [
     {
+      "id": "adventurecube",
+      "name": "AdventureCube (Debug)",
+      "description": "AdventureCube の Debug ビルドを起動。Vulkan + BPM ベースのアクション/リズム 3D ゲーム。run.bat と同等の挙動を再現するため cwd は build/Debug (shaders/ パスを ../shaders として解決させる)。",
+      "target": "desktop",
+      "build": {
+        "cwd": "E:/Document/Ars/AdventureCube",
+        "cmd": "cmake",
+        "args": ["--build", "build", "--config", "Debug"],
+        "timeoutSec": 900
+      },
+      "run": {
+        "cwd": "E:/Document/Ars/AdventureCube/build/Debug",
+        "cmd": "adventurecube.exe"
+      },
+      "test": {
+        "cwd": "E:/Document/Ars/AdventureCube",
+        "cmd": "ctest",
+        "args": ["-C", "Debug", "--output-on-failure"]
+      },
+      "capture": {
+        "type": "window",
+        "windowTitle": "AdventureCube",
+        "fps": 30,
+        "preset": "veryfast"
+      },
+      "input": {
+        "buttons": [
+          { "label": "Forward",  "key": "W" },
+          { "label": "Back",     "key": "S" },
+          { "label": "Left",     "key": "A" },
+          { "label": "Right",    "key": "D" },
+          { "label": "Jump",     "key": "Space" },
+          { "label": "Attack",   "key": "J" },
+          { "label": "Skill",    "key": "K" },
+          { "label": "Pause",    "key": "Escape" },
+          { "label": "Quit",     "action": "kill" }
+        ],
+        "allowKeyboard": true,
+        "allowMouse": true
+      },
+      "logs": { "stdout": true, "stderr": true, "files": [] }
+    },
+    {
       "id": "pictor-mobile-demo",
       "name": "Pictor Mobile Demo",
-      "description": "Pictor の mobile pipeline simulation (headless console)。ライフサイクル / プロファイル切替の確認用。",
+      "description": "Pictor の mobile pipeline simulation (headless console)。",
       "target": "desktop",
       "build": {
         "cwd": "E:/Document/Ars/Pictor",
@@ -16,44 +59,6 @@
         "cwd": "E:/Document/Ars/Pictor",
         "cmd": "build/Debug/pictor_mobile_demo.exe",
         "args": ["--profile=MobileLow", "--frames=120"]
-      },
-      "test": {
-        "cwd": "E:/Document/Ars/Pictor",
-        "cmd": "ctest",
-        "args": ["-C", "Debug", "--output-on-failure"]
-      },
-      "capture": {
-        "type": "window",
-        "windowTitle": "Pictor",
-        "fps": 30,
-        "preset": "veryfast"
-      },
-      "input": {
-        "buttons": [
-          { "label": "Pause",  "key": "Space" },
-          { "label": "Resume", "key": "Space" },
-          { "label": "Switch Profile", "key": "P" },
-          { "label": "Quit",   "action": "kill" }
-        ],
-        "allowKeyboard": true,
-        "allowMouse": false
-      },
-      "logs": { "stdout": true, "stderr": true, "files": [] }
-    },
-    {
-      "id": "ergo-bench-curve",
-      "name": "Ergo Bench — Curve",
-      "description": "Ergo の curve.bake / curve.evaluate ベンチマーク。コンソール出力のみ。",
-      "target": "desktop",
-      "build": {
-        "cwd": "E:/Document/Ars/Ergo",
-        "cmd": "cmake",
-        "args": ["--build", "build", "--config", "Release", "--target", "bench_curve"],
-        "timeoutSec": 300
-      },
-      "run": {
-        "cwd": "E:/Document/Ars/Ergo",
-        "cmd": "build/Release/bench_curve.exe"
       },
       "input": {
         "buttons": [

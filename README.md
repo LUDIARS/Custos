@@ -9,13 +9,18 @@ build / run / kill し、ログとテスト結果を見ながらバーチャル�
 
 ```bash
 npm install
-npm run serve            # http://localhost:5180/
+CUSTOS_OPEN=1 npm run serve   # frontend http://localhost:4649/  backend http://localhost:7676/
 # もしくは Electron で開く
-npm run start
+CUSTOS_OPEN=1 npm run start
 ```
 
+- **Frontend**: http://localhost:4649/ (静的 + `/config.js` で backend URL を注入)
+- **Backend**:  http://localhost:7676/ (API + WS)
+
+ポート上書きは `CUSTOS_PORT` (backend) / `CUSTOS_FRONTEND_PORT` (frontend) で。
+
 設定ファイル: `config/apps.json` (`CUSTOS_APPS_FILE` で上書き可)。
-サンプルとして Pictor mobile demo と Ergo bench_curve が登録済み。
+サンプルとして AdventureCube (Debug) と Pictor mobile demo が登録済み。
 
 開発時に認証を外したい場合は `CUSTOS_OPEN=1` を環境変数で設定。
 
@@ -103,11 +108,15 @@ tests/
 
 | key | 既定 | 用途 |
 |-----|------|------|
-| `CUSTOS_PORT`       | 5180 | HTTP listen |
-| `CUSTOS_HOST`       | 0.0.0.0 | bind |
-| `CUSTOS_APPS_FILE`  | config/apps.json | 設定パス |
-| `CUSTOS_OPEN`       | (off) | "1" で WS 認証スキップ |
-| `CORS_ORIGIN`       | *    | CORS allow |
+| `CUSTOS_PORT`            | 7676 | backend (API + WS) listen |
+| `CUSTOS_FRONTEND_PORT`   | 4649 | frontend (静的) listen |
+| `CUSTOS_BACKEND_URL`     | (auto) | ブラウザに注入される backend URL |
+| `CUSTOS_HOST`            | 0.0.0.0 | bind |
+| `CUSTOS_APPS_FILE`       | config/apps.json | 設定パス |
+| `CUSTOS_OPEN`            | (off) | "1" で REST + WS 認証スキップ |
+| `CORS_ORIGIN`            | *    | CORS allow (frontend と backend が別 origin) |
+| `CUSTOS_FFMPEG`          | "ffmpeg" | キャプチャ用 ffmpeg 実行ファイル |
+| `CUSTOS_ADB`             | "adb" | Android 入力用 adb 実行ファイル |
 
 ## ライセンス
 

@@ -1,26 +1,34 @@
 /**
  * Custos エントリポイント。
  *
- *   1. apps.json を読み込み
- *   2. AppsRegistry / AppsRunner / WebRTCBroker を組み立てる
- *   3. Hono アプリを HTTP サーバーに乗せる
- *   4. /ws の WebSocket broker を attach する
+ * Backend (API + WS) と Frontend (静的) を **別ポート** で立てる。
+ *   既定: frontend 4649 / backend 7676
+ *   override: CUSTOS_PORT (backend) / CUSTOS_FRONTEND_PORT (frontend)
  *
- * Electron 経由で起動する場合は `electron/main.cjs` がこのモジュールを
- * spawn して開いた window から localhost に接続する想定。
+ * Frontend は `/config.js` で `window.__CUSTOS_BACKEND__ = ...` を注入する。
+ * ブラウザ JS はこれを使って CORS 越しに backend を呼ぶ。
+ *
+ * Electron 経由で起動する場合は `electron/main.cjs` が frontend port に
+ * BrowserWindow を向ける。
  */
 
 import { serve } from "@hono/node-server";
+import type { Server as HttpServer } from "node:http";
 import { loadAppsConfig } from "./config/apps-config.js";
 import { AppsRegistry }   from "./apps/registry.js";
 import { AppsRunner }     from "./apps/runner.js";
-import { buildApp }       from "./app.js";
+import { buildBackendApp, buildFrontendApp } from "./app.js";
 import { attachWebSocketBroker } from "./ws/handler.js";
 import { WebRTCBroker } from "./capture/webrtc-broker.js";
 import { logger } from "./shared/logger.js";
 
-const PORT = Number(process.env.CUSTOS_PORT ?? process.env.PORT ?? 5180);
-const HOST = process.env.CUSTOS_HOST ?? "0.0.0.0";
+const BACKEND_PORT  = Number(process.env.CUSTOS_PORT ?? 7676);
+const FRONTEND_PORT = Number(process.env.CUSTOS_FRONTEND_PORT ?? 4649);
+const HOST          = process.env.CUSTOS_HOST ?? "0.0.0.0";
+
+/// frontend が JS に注入する backend URL。明示指定が無ければ同ホストの BACKEND_PORT を指す。
+const BACKEND_URL_FOR_BROWSER = process.env.CUSTOS_BACKEND_URL
+    ?? `http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${BACKEND_PORT}`;
 
 async function main() {
     const cfg = loadAppsConfig();
@@ -35,19 +43,29 @@ async function main() {
         if (kind === "run") broker.closeAllForApp(appId);
     });
 
-    const app = buildApp({ registry, runner, broker });
-
-    const server = serve({ fetch: app.fetch, hostname: HOST, port: PORT }, (info) => {
-        logger.info({ host: info.address, port: info.port }, "custos http server listening");
+    // ── Backend ──
+    const backend = buildBackendApp({ registry, runner, broker });
+    const backendServer = serve({ fetch: backend.fetch, hostname: HOST, port: BACKEND_PORT }, (info) => {
+        logger.info({ host: info.address, port: info.port }, "backend listening");
     });
+    attachWebSocketBroker(backendServer as unknown as HttpServer, { registry, runner }, "/ws");
 
-    attachWebSocketBroker(server as unknown as import("node:http").Server, { registry, runner }, "/ws");
+    // ── Frontend ──
+    const frontend = buildFrontendApp({ backendUrl: BACKEND_URL_FOR_BROWSER });
+    const frontendServer = serve({ fetch: frontend.fetch, hostname: HOST, port: FRONTEND_PORT }, (info) => {
+        logger.info({
+            host: info.address, port: info.port,
+            backendForBrowser: BACKEND_URL_FOR_BROWSER,
+        }, "frontend listening");
+    });
 
     const shutdown = (sig: NodeJS.Signals) => {
         logger.info({ sig }, "shutting down");
         broker.shutdown();
         runner.shutdown();
-        server.close(() => process.exit(0));
+        backendServer.close();
+        frontendServer.close();
+        setTimeout(() => process.exit(0), 200).unref();
         setTimeout(() => process.exit(1), 5000).unref();
     };
     process.on("SIGINT",  shutdown);

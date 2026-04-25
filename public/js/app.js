@@ -12,7 +12,9 @@
 
 import { connectWebRTC, closeWebRTC } from "/js/webrtc.js";
 
-const API = "/api";
+// /config.js から `window.__CUSTOS_BACKEND__` が注入される。空文字なら同 origin。
+const BACKEND = (window.__CUSTOS_BACKEND__ ?? "").replace(/\/$/, "");
+const API = `${BACKEND}/api`;
 const TOKEN_KEY = "custos.token";
 
 // ─── auth ──────────────────────────────────────
@@ -28,12 +30,18 @@ export async function apiFetch(path, opts = {}) {
     const headers = { "content-type": "application/json", ...(opts.headers ?? {}) };
     const tok = getToken();
     if (tok) headers["authorization"] = `Bearer ${tok}`;
-    const res = await fetch(API + path, { ...opts, headers });
+    const res = await fetch(API + path, { ...opts, headers, mode: "cors" });
     if (res.status === 401) {
         promptToken();
         throw new Error("unauthorized");
     }
     return res;
+}
+/** WebSocket 用の base URL (`ws://...` / `wss://...`)。 */
+export function wsBase() {
+    if (BACKEND) return BACKEND.replace(/^http/, "ws");
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    return `${proto}//${location.host}`;
 }
 function promptToken() {
     const cur = getToken();
@@ -260,10 +268,9 @@ async function teardownCapture() {
 // ─── WS ─────────────────────────────────────────
 
 function connectWs() {
-    const proto = location.protocol === "https:" ? "wss:" : "ws:";
     const tok = getToken();
     if (!tok) return;       // promptToken が呼ばれた後に再接続される
-    const url = `${proto}//${location.host}/ws?token=${encodeURIComponent(tok)}`;
+    const url = `${wsBase()}/ws?token=${encodeURIComponent(tok)}`;
     const ws = new WebSocket(url);
     state.ws = ws;
     ws.addEventListener("open", () => {

@@ -1,12 +1,13 @@
 /**
- * Electron wrapper — Hono サーバーを子プロセスで起動して BrowserWindow で開く。
+ * Electron wrapper — Custos の backend (API+WS) と frontend (静的) を
+ * 子プロセスで起こして、BrowserWindow を frontend port に向ける。
  *
  * 通常は `npm run start` から呼ばれる:
- *   1. ポートを決める (既定 5180、CUSTOS_PORT で override 可)
+ *   1. backend port (既定 7676) と frontend port (既定 4649) を決める
  *   2. `node dist/main.js` (または開発時は `tsx src/main.ts`) を spawn
- *   3. /api/health が応答したら BrowserWindow を `localhost:port` で開く
+ *   3. backend /api/health が応答したら BrowserWindow を frontend に向ける
  *
- * Electron は単に「ローカル UI を開きやすくする」目的で、ロジックは何も持たない。
+ * Electron はロジックを持たず単に「ローカル UI を開きやすくする」役割。
  * リモートで使うなら Electron 抜きで `npm run serve` だけでよい。
  */
 
@@ -15,7 +16,8 @@ const path = require("path");
 const { spawn } = require("child_process");
 const http = require("http");
 
-const PORT = Number(process.env.CUSTOS_PORT || 5180);
+const BACKEND_PORT  = Number(process.env.CUSTOS_PORT          || 7676);
+const FRONTEND_PORT = Number(process.env.CUSTOS_FRONTEND_PORT || 4649);
 const DEV  = process.env.NODE_ENV !== "production" && process.env.CUSTOS_DEV !== "0";
 
 let serverProc = null;
@@ -27,7 +29,11 @@ function startServer() {
     const args = DEV ? ["tsx", "src/main.ts"] : ["dist/main.js"];
     serverProc = spawn(cmd, args, {
         cwd: root,
-        env: { ...process.env, CUSTOS_PORT: String(PORT) },
+        env: {
+            ...process.env,
+            CUSTOS_PORT:          String(BACKEND_PORT),
+            CUSTOS_FRONTEND_PORT: String(FRONTEND_PORT),
+        },
         stdio: ["ignore", "inherit", "inherit"],
         shell: process.platform === "win32",
     });
@@ -40,11 +46,11 @@ function startServer() {
     });
 }
 
-function waitForReady(timeoutMs = 15_000) {
+function waitForBackend(timeoutMs = 15_000) {
     return new Promise((resolve, reject) => {
         const deadline = Date.now() + timeoutMs;
         const tryOnce = () => {
-            const req = http.get({ host: "127.0.0.1", port: PORT, path: "/api/health", timeout: 500 }, (res) => {
+            const req = http.get({ host: "127.0.0.1", port: BACKEND_PORT, path: "/api/health", timeout: 500 }, (res) => {
                 res.resume();
                 if (res.statusCode === 200) resolve();
                 else retry();
@@ -52,7 +58,7 @@ function waitForReady(timeoutMs = 15_000) {
             req.on("error", retry);
         };
         const retry = () => {
-            if (Date.now() > deadline) reject(new Error("custos server did not become ready in time"));
+            if (Date.now() > deadline) reject(new Error("custos backend did not become ready in time"));
             else setTimeout(tryOnce, 250);
         };
         tryOnce();
@@ -70,7 +76,7 @@ function createWindow() {
             sandbox: true,
         },
     });
-    mainWindow.loadURL(`http://localhost:${PORT}/`);
+    mainWindow.loadURL(`http://localhost:${FRONTEND_PORT}/`);
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
         shell.openExternal(url);
         return { action: "deny" };
@@ -81,7 +87,7 @@ function createWindow() {
 app.whenReady().then(async () => {
     startServer();
     try {
-        await waitForReady();
+        await waitForBackend();
     } catch (err) {
         console.error("[custos-electron]", err);
     }

@@ -29,7 +29,7 @@
         <video id="streamVideo" autoplay playsinline muted></video>
         <div class="stream-placeholder" id="streamPlaceholder">
           <div class="ph-title">No stream yet</div>
-          <div class="ph-hint">Run のあと WebRTC 接続が確立されると映像が出ます (Phase 2 実装予定)</div>
+          <div class="ph-hint">Run のあと WebRTC 接続が確立されると映像が出ます。capture 設定が無い app は表示されません</div>
         </div>
       </div>
     </section>
@@ -71,9 +71,12 @@
   <footer class="app-footer">
     <span id="wsStatus" class="ws-status disconnected">WS disconnected</span>
     <span class="grow"></span>
-    <span class="hint">Custos v0.1.0 — Cernere 認証 / WebRTC キャプチャは Phase 2</span>
+    <span class="hint">Custos v0.1.0</span>
   </footer>
 
+  <!-- 同 origin の /config.js が `window.__CUSTOS_BACKEND__` を埋める。
+       backend (API + WS) は別ポートに居るので、JS はこの値を見て CORS で叩く。 -->
+  <script src="/config.js"></script>
   <script type="module" src="/js/app.js"></script>
 </body>
 </html>
