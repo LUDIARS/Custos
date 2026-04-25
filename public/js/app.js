@@ -2,14 +2,47 @@
  * Custos frontend — vanilla ES module.
  *
  * 役割:
- *  - /api/apps を叩いてセレクタを埋める
+ *  - /api/apps を叩いてセレクタを埋める (Bearer token 認証付き)
  *  - 選択した app に対して /ws をはり、log / status / exit を受信
  *  - Build / Run / Test / Kill ボタンを REST に流す
  *  - app.input.buttons から virtual keys を生成 → クリックを WS で送信
  *  - Logs / Tests タブ切替
+ *  - Phase 2: WebRTC PC を生成、capture stream を <video> に流す
  */
 
+import { connectWebRTC, closeWebRTC } from "/js/webrtc.js";
+
 const API = "/api";
+const TOKEN_KEY = "custos.token";
+
+// ─── auth ──────────────────────────────────────
+
+export function getToken() {
+    return sessionStorage.getItem(TOKEN_KEY) ?? "";
+}
+function setToken(t) {
+    if (t) sessionStorage.setItem(TOKEN_KEY, t);
+    else   sessionStorage.removeItem(TOKEN_KEY);
+}
+export async function apiFetch(path, opts = {}) {
+    const headers = { "content-type": "application/json", ...(opts.headers ?? {}) };
+    const tok = getToken();
+    if (tok) headers["authorization"] = `Bearer ${tok}`;
+    const res = await fetch(API + path, { ...opts, headers });
+    if (res.status === 401) {
+        promptToken();
+        throw new Error("unauthorized");
+    }
+    return res;
+}
+function promptToken() {
+    const cur = getToken();
+    const next = window.prompt(
+        "Custos 認証\n\nCernere の access token を貼り付けてください。\n(CUSTOS_OPEN=1 環境では任意の文字列で OK)",
+        cur,
+    );
+    if (next != null) setToken(next.trim());
+}
 
 // ─── DOM refs ──────────────────────────────────
 const $ = (id) => document.getElementById(id);
@@ -27,18 +60,21 @@ const overlayToggle = $("overlayToggle");
 const layoutEl     = document.querySelector(".layout");
 const tabs         = [...document.querySelectorAll(".tab")];
 const tabPanels    = [...document.querySelectorAll(".tab-panel")];
+const streamVideo       = $("streamVideo");
+const streamPlaceholder = $("streamPlaceholder");
 
 // ─── state ──────────────────────────────────────
 const state = {
-    apps:    [],          // /api/apps の items
-    appId:   null,        // 選択中
+    apps:    [],
+    appId:   null,
     ws:      null,
-    /** 同 appId に紐付けされた config (input.buttons 等を保持)。 */
     selectedConfig: null,
+    captureSessionId: null,
 };
 
 // ─── boot ───────────────────────────────────────
 async function boot() {
+    if (!getToken()) promptToken();
     await loadApps();
     appSelect.addEventListener("change", onAppChange);
     btnBuild.addEventListener("click", () => apiAction("build"));
@@ -58,7 +94,7 @@ async function boot() {
 
 async function loadApps() {
     try {
-        const res = await fetch(`${API}/apps`);
+        const res = await apiFetch(`/apps`);
         const json = await res.json();
         state.apps = json.apps ?? [];
         appSelect.innerHTML = "";
@@ -70,7 +106,7 @@ async function loadApps() {
             appendLog({ kind: "meta", stream: "stdout", text: "config/apps.json にアプリが定義されていません。\n" });
         }
     } catch (err) {
-        appendLog({ kind: "meta", stream: "stderr", text: `[custos] /api/apps fetch failed: ${err}\n` });
+        appendLog({ kind: "meta", stream: "stderr", text: `[custos] /api/apps fetch failed: ${err.message ?? err}\n` });
     }
 }
 
@@ -79,12 +115,18 @@ function opt(value, label) {
     o.value = value; o.textContent = label; return o;
 }
 
-function onAppChange() {
+async function onAppChange() {
     const id = appSelect.value;
     state.appId = id || null;
     state.selectedConfig = state.apps.find((a) => a.config.id === id)?.config ?? null;
     renderVirtualKeys();
     updateActionButtons();
+
+    // 既存の capture を畳む
+    await teardownCapture();
+    streamVideo.classList.remove("active");
+    streamPlaceholder.style.display = "";
+
     if (state.appId) {
         applyStatus(state.apps.find((a) => a.config.id === id)?.status ?? null);
         wsSend({ type: "subscribe", appId: state.appId });
@@ -100,6 +142,15 @@ function applyStatus(status) {
     statusPill.dataset.state = status.lifecycle;
     statusPill.textContent = status.lifecycle + (status.pid ? ` · pid ${status.pid}` : "");
     updateActionButtons();
+
+    // running 遷移時に capture を試みる (capture 設定がある場合のみ)
+    if (status.lifecycle === "running" && state.selectedConfig?.capture && !state.captureSessionId) {
+        startCapture(status.id).catch((err) => {
+            appendLog({ kind: "meta", stream: "stderr", text: `[capture] ${err.message ?? err}\n` });
+        });
+    } else if (status.lifecycle !== "running" && state.captureSessionId) {
+        teardownCapture().catch(() => {});
+    }
 }
 
 function updateActionButtons() {
@@ -168,7 +219,7 @@ async function triggerButton(btn, id) {
 async function apiAction(kind) {
     if (!state.appId) return;
     try {
-        const res = await fetch(`${API}/apps/${encodeURIComponent(state.appId)}/${kind}`, { method: "POST" });
+        const res = await apiFetch(`/apps/${encodeURIComponent(state.appId)}/${kind}`, { method: "POST" });
         const json = await res.json();
         if (!res.ok || json.ok === false) {
             appendLog({ kind: "meta", stream: "stderr", text: `[${kind}] failed: ${json.error ?? res.status}\n` });
@@ -176,15 +227,42 @@ async function apiAction(kind) {
             appendLog({ kind: "meta", stream: "stdout", text: `[${kind}] accepted (${kind === "kill" ? "killed=" + json.ok : Object.keys(json).filter((k) => k !== "ok").join(", ")})\n` });
         }
     } catch (err) {
-        appendLog({ kind: "meta", stream: "stderr", text: `[${kind}] network error: ${err}\n` });
+        appendLog({ kind: "meta", stream: "stderr", text: `[${kind}] network error: ${err.message ?? err}\n` });
     }
+}
+
+// ─── capture (WebRTC) ─────────────────────────
+
+async function startCapture(appId) {
+    try {
+        const sessionId = await connectWebRTC({
+            appId,
+            videoEl:   streamVideo,
+            apiFetch,
+            onLog: (text, isErr) => appendLog({ kind: "meta", stream: isErr ? "stderr" : "stdout", text: `[capture] ${text}\n` }),
+        });
+        state.captureSessionId = sessionId;
+        streamVideo.classList.add("active");
+        streamPlaceholder.style.display = "none";
+    } catch (err) {
+        appendLog({ kind: "meta", stream: "stderr", text: `[capture] start failed: ${err.message ?? err}\n` });
+    }
+}
+
+async function teardownCapture() {
+    if (!state.captureSessionId) return;
+    try {
+        await closeWebRTC({ apiFetch, sessionId: state.captureSessionId });
+    } catch { /* ignore */ }
+    state.captureSessionId = null;
 }
 
 // ─── WS ─────────────────────────────────────────
 
 function connectWs() {
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
-    const tok = "dev-token";   // MVP: token は何でも OK (CUSTOS_OPEN=1 なら不要)
+    const tok = getToken();
+    if (!tok) return;       // promptToken が呼ばれた後に再接続される
     const url = `${proto}//${location.host}/ws?token=${encodeURIComponent(tok)}`;
     const ws = new WebSocket(url);
     state.ws = ws;

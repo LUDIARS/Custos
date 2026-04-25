@@ -22,6 +22,7 @@ import type {
     AppStatus,
 } from "../shared/types.js";
 import { sendKey, sendClick } from "../input/forwarder.js";
+import { getCernereAuth, type VerifiedUser } from "../auth/cernere-auth.js";
 
 const log = childLogger("ws");
 
@@ -29,8 +30,7 @@ interface Session {
     id:    string;
     ws:    WebSocket;
     appIds: Set<string>;
-    /** 認証済 user id (将来 Cernere 連携時に埋める)。 */
-    userId?: string;
+    user:  VerifiedUser;
 }
 
 export interface WsBrokerDeps {
@@ -46,8 +46,9 @@ export function attachWebSocketBroker(
     const wss = new WebSocketServer({ server: httpServer, path });
     const sessions = new Map<string, Session>();
 
-    wss.on("connection", (ws, req: IncomingMessage) => {
-        if (!authorize(req)) {
+    wss.on("connection", async (ws, req: IncomingMessage) => {
+        const user = await authorize(req);
+        if (!user) {
             ws.close(4401, "unauthorized");
             return;
         }
@@ -55,9 +56,10 @@ export function attachWebSocketBroker(
             id: randomUUID(),
             ws,
             appIds: new Set(),
+            user,
         };
         sessions.set(session.id, session);
-        log.info({ sessionId: session.id }, "ws connected");
+        log.info({ sessionId: session.id, userId: user.id }, "ws connected");
 
         ws.on("message", (data, isBinary) => {
             if (isBinary) return;   // バイナリ未使用
@@ -169,12 +171,17 @@ export function labelToId(label: string): string {
     return label.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
 }
 
-function authorize(req: IncomingMessage): boolean {
-    if (process.env.CUSTOS_OPEN === "1") return true;
-    // MVP: ?token=... の存在のみチェック。将来 Cernere /api/auth/verify と統合。
+async function authorize(req: IncomingMessage): Promise<VerifiedUser | null> {
+    // クエリ token を最優先 (ブラウザの WS は Authorization ヘッダを付けにくい)。
+    // 次点で Authorization: Bearer ヘッダ。
     const url = new URL(req.url ?? "/", "http://localhost");
-    const tok = url.searchParams.get("token");
-    return Boolean(tok && tok.length > 0);
+    const tok = url.searchParams.get("token")
+        ?? (() => {
+            const h = req.headers["authorization"];
+            const m = typeof h === "string" ? /^Bearer\s+(.+)$/i.exec(h) : null;
+            return m?.[1] ?? "";
+        })();
+    return await getCernereAuth().verify(tok);
 }
 
 function send(ws: WebSocket, msg: ServerMessage): void {

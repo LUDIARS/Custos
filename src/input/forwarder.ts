@@ -6,12 +6,13 @@
  * `[input:dev] key=W down=true` のログだけ出すフォールバックモードで
  * 動作する (Frontend からの操作確認には十分)。
  *
- * Android (`target: "android"`) は将来 adb input keyevent 経由で送るため
- * の hook を分けてあるが、MVP では未実装で no-op + warn ログ。
+ * Android (`target: "android"`) は `adb shell input keyevent <code>` /
+ * `input tap <x> <y>` で送る。adb 未導入なら warn のみ。
  */
 
 import { childLogger } from "../shared/logger.js";
 import type { AppConfig } from "../config/apps-config.js";
+import { androidSendKey, androidSendTap } from "./android.js";
 
 const log = childLogger("input");
 
@@ -34,8 +35,6 @@ async function getNut(): Promise<NutLike | null> {
     if (!nutPromise) {
         nutPromise = (async () => {
             try {
-                // dynamic import — Optional dep。`import()` で undefined export のまま
-                // 落ちる環境がある (例: nut-js が native dep ロードに失敗) ので catch する。
                 const mod = (await import("@nut-tree-fork/nut-js")) as unknown as NutLike;
                 if (!mod.keyboard || !mod.Key) {
                     log.warn("nut-js loaded but API not as expected — falling back to dev mode");
@@ -55,7 +54,6 @@ async function getNut(): Promise<NutLike | null> {
 /** key 名を nut-js Key enum に解決。"W" → Key.W、"Space" → Key.Space。
  *  解決できなければ undefined。 */
 function resolveKey(nut: NutLike, name: string): unknown | undefined {
-    // 1 文字 → 大文字化して検索 ("w" → "W")
     const norm = name.length === 1 ? name.toUpperCase() : name;
     return nut.Key[norm];
 }
@@ -63,12 +61,17 @@ function resolveKey(nut: NutLike, name: string): unknown | undefined {
 // ─── public API ────────────────────────────────────────────
 
 export async function sendKey(app: AppConfig, key: string, down: boolean): Promise<void> {
-    if (app.target === "android") {
-        log.warn({ appId: app.id, key }, "android key forwarding not implemented yet");
-        return;
-    }
     if (!app.input.allowKeyboard) {
         log.warn({ appId: app.id }, "keyboard input disabled by app config");
+        return;
+    }
+
+    if (app.target === "android") {
+        // adb keyevent は瞬間動作 (down/up を含む) なので down=true 時のみ発火、
+        // release-only 呼び出しは noop に。
+        if (!down) return;
+        const serial = app.capture?.androidSerial;
+        await androidSendKey(key, serial ? { serial } : {});
         return;
     }
 
@@ -92,14 +95,17 @@ export async function sendClick(
     y: number,
     button: "left" | "right" | "middle" = "left",
 ): Promise<void> {
-    if (app.target === "android") {
-        log.warn({ appId: app.id }, "android tap forwarding not implemented yet");
-        return;
-    }
     if (!app.input.allowMouse) {
         log.warn({ appId: app.id }, "mouse input disabled by app config");
         return;
     }
+
+    if (app.target === "android") {
+        const serial = app.capture?.androidSerial;
+        await androidSendTap(x, y, serial ? { serial } : {});
+        return;
+    }
+
     const nut = await getNut();
     if (!nut) {
         log.info({ appId: app.id, x, y, button }, "[input:dev] click (no nut-js)");

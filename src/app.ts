@@ -9,22 +9,27 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createAppsRoutes } from "./routes/apps-routes.js";
+import { createRtcRoutes }  from "./routes/rtc-routes.js";
+import { cernereAuthMiddleware } from "./auth/middleware.js";
 import type { AppsRegistry } from "./apps/registry.js";
 import type { AppsRunner }   from "./apps/runner.js";
+import type { WebRTCBroker } from "./capture/webrtc-broker.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export interface BuildAppDeps {
     registry: AppsRegistry;
     runner:   AppsRunner;
+    broker:   WebRTCBroker;
 }
 
-export function buildApp({ registry, runner }: BuildAppDeps) {
+export function buildApp({ registry, runner, broker }: BuildAppDeps) {
     const app = new Hono();
 
     app.use("*", honoLogger());
     app.use("*", cors({ origin: process.env.CORS_ORIGIN ?? "*", credentials: true }));
 
+    // /api/health は認証不要 (監視 / Electron readiness 用)。
     app.get("/api/health", (c) => c.json({
         status:  "ok",
         service: "custos",
@@ -32,7 +37,10 @@ export function buildApp({ registry, runner }: BuildAppDeps) {
         apps:    registry.listConfigs().length,
     }));
 
+    // 認証必須エンドポイント (CUSTOS_OPEN=1 で素通し、CERNERE_URL 未設定なら token 非空)。
+    app.use("/api/apps/*", cernereAuthMiddleware());
     app.route("/api/apps", createAppsRoutes({ registry, runner }));
+    app.route("/api/apps", createRtcRoutes({ registry, broker }));
 
     // 静的ファイル (frontend)。tsx で動かすときは src/ の隣の public/ を、
     // dist 経由のときは <dist>/.. の public/ を見る。process.cwd() 基準にして

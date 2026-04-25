@@ -2,7 +2,7 @@
  * Custos エントリポイント。
  *
  *   1. apps.json を読み込み
- *   2. AppsRegistry / AppsRunner を組み立てる
+ *   2. AppsRegistry / AppsRunner / WebRTCBroker を組み立てる
  *   3. Hono アプリを HTTP サーバーに乗せる
  *   4. /ws の WebSocket broker を attach する
  *
@@ -16,6 +16,7 @@ import { AppsRegistry }   from "./apps/registry.js";
 import { AppsRunner }     from "./apps/runner.js";
 import { buildApp }       from "./app.js";
 import { attachWebSocketBroker } from "./ws/handler.js";
+import { WebRTCBroker } from "./capture/webrtc-broker.js";
 import { logger } from "./shared/logger.js";
 
 const PORT = Number(process.env.CUSTOS_PORT ?? process.env.PORT ?? 5180);
@@ -27,8 +28,14 @@ async function main() {
 
     const registry = new AppsRegistry(cfg.apps);
     const runner   = new AppsRunner(registry);
+    const broker   = new WebRTCBroker();
 
-    const app = buildApp({ registry, runner });
+    // run プロセス終了 → そのアプリの capture も閉じる。
+    runner.on("exit", (appId, kind) => {
+        if (kind === "run") broker.closeAllForApp(appId);
+    });
+
+    const app = buildApp({ registry, runner, broker });
 
     const server = serve({ fetch: app.fetch, hostname: HOST, port: PORT }, (info) => {
         logger.info({ host: info.address, port: info.port }, "custos http server listening");
@@ -38,9 +45,9 @@ async function main() {
 
     const shutdown = (sig: NodeJS.Signals) => {
         logger.info({ sig }, "shutting down");
+        broker.shutdown();
         runner.shutdown();
         server.close(() => process.exit(0));
-        // 強制終了の保険
         setTimeout(() => process.exit(1), 5000).unref();
     };
     process.on("SIGINT",  shutdown);
