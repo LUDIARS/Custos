@@ -1,0 +1,144 @@
+{
+  "repo": "Custos",
+  "date": "2026-05-13",
+  "reviewer": "Claude Opus 4.7 (1M context)",
+  "weighted_score": 70,
+  "weights": {
+    "design": 0.30,
+    "vulnerability": 0.30,
+    "implementation": 0.20,
+    "missing_features": 0.10,
+    "quality": 0.10
+  },
+  "grades": {
+    "overall": "B",
+    "design": "B",
+    "vulnerability": "C",
+    "implementation": "B",
+    "missing_features": "B",
+    "quality": "B"
+  },
+  "findings_count": {
+    "design": 4,
+    "vulnerability": 8,
+    "implementation": 6,
+    "missing_features": 8,
+    "quality": 3,
+    "total": 29
+  },
+  "autofix_count": 0,
+  "autofix_candidates": 14,
+  "key_findings": [
+    {
+      "id": "V1",
+      "severity": "high",
+      "title": "0.0.0.0 bind + anonymous 既定の併用",
+      "file": "src/main.ts:30",
+      "summary": "CUSTOS_HOST default = 0.0.0.0 と Cernere 未設定の anonymous 自動許可で、LAN 内から無認証で /api/apps/*/run /kill /key が叩ける"
+    },
+    {
+      "id": "V2",
+      "severity": "high",
+      "title": "WebSocket 認証も anonymous をそのまま通す",
+      "file": "src/ws/handler.ts:202-213",
+      "summary": "?token= を verify するが、CERNERE_URL 未設定では token 中身に関わらず anon 返却。WS から key/click/button が無認証で送信可能"
+    },
+    {
+      "id": "V4",
+      "severity": "high",
+      "title": "apps.json の cmd / args を直接 spawn",
+      "file": "src/apps/runner.ts:138-144",
+      "summary": "信頼境界が apps.json のファイル権限のみ。設定編集 API を将来作るなら任意コマンド実行に直結"
+    },
+    {
+      "id": "V5",
+      "severity": "medium",
+      "title": "ergoCustos.host が任意文字列",
+      "file": "src/config/apps-config.ts:101-104",
+      "summary": "loopback のみに制限が必要。外部 URL 設定で SSRF 経路化のリスク"
+    },
+    {
+      "id": "V6",
+      "severity": "medium",
+      "title": "WebRTC SDP の長さ/内容検証無し",
+      "file": "src/routes/rtc-routes.ts:67-83",
+      "summary": "巨大 SDP / 不正 candidate のフィルタなし。V2 と組合せで anonymous DoS の入口になり得る"
+    },
+    {
+      "id": "V7",
+      "severity": "medium",
+      "title": "WS key メッセージで任意 key 名が通る",
+      "file": "src/input/forwarder.ts:64-108",
+      "summary": "apps.json で定義したボタン外の freeform key (例: Win+R) を WS から送れる。許可リスト未実装"
+    },
+    {
+      "id": "D1",
+      "severity": "medium",
+      "title": "build timeout の SIGKILL が子孫を残す",
+      "file": "src/apps/runner.ts:162-167",
+      "summary": "kill() は taskkill /T /F だが timeout 経路は proc.kill('SIGKILL') 直撃。Windows で残骸プロセス"
+    },
+    {
+      "id": "M1",
+      "severity": "medium",
+      "title": "Cernere 認証は scaffold、role gate 無し",
+      "file": "src/auth/cernere-auth.ts:60-65",
+      "summary": "stub user の role が general 固定で、admin / restricted の意味分岐が build/run/kill に存在しない"
+    },
+    {
+      "id": "M2",
+      "severity": "medium",
+      "title": "Android target は capture / build / run 未実装",
+      "file": "src/input/android.ts",
+      "summary": "adb keyevent のみ実装。screenrecord パイプラインや adb install / am start の build/run 分岐は無い"
+    },
+    {
+      "id": "I1",
+      "severity": "low",
+      "title": "WebRTC PC event subscribe の二重化",
+      "file": "src/capture/webrtc-broker.ts:217-239",
+      "summary": "pc.on と subscribe(connectionStateChange) の両方で発火し、診断履歴に重複が乗る"
+    }
+  ],
+  "files_reviewed": [
+    "README.md",
+    "CLAUDE.md",
+    "config/apps.json",
+    "package.json",
+    ".env.example",
+    "src/main.ts",
+    "src/app.ts",
+    "src/apps/registry.ts",
+    "src/apps/runner.ts",
+    "src/auth/cernere-auth.ts",
+    "src/auth/middleware.ts",
+    "src/config/apps-config.ts",
+    "src/capture/ergo-custos-client.ts",
+    "src/capture/ffmpeg-pipeline.ts",
+    "src/capture/h264.ts",
+    "src/capture/scale.ts",
+    "src/capture/screenshot.ts",
+    "src/capture/screenshot-stream.ts",
+    "src/capture/webrtc-broker.ts",
+    "src/input/android.ts",
+    "src/input/forwarder.ts",
+    "src/routes/apps-routes.ts",
+    "src/routes/rtc-routes.ts",
+    "src/routes/settings-routes.ts",
+    "src/runtime/stream-prefs.ts",
+    "src/shared/types.ts",
+    "src/ws/handler.ts",
+    "electron/main.cjs",
+    "public/js/app.js"
+  ],
+  "outputs": [
+    "review/2026-05-13/REVIEW.md",
+    "review/2026-05-13/REVIEW_DESIGN.md",
+    "review/2026-05-13/REVIEW_VULNERABILITY.md",
+    "review/2026-05-13/REVIEW_IMPLEMENTATION.md",
+    "review/2026-05-13/REVIEW_MISSING_FEATURES.md",
+    "review/2026-05-13/REVIEW_QUALITY.md",
+    "review/2026-05-13/AUTOFIX.md",
+    "review/2026-05-13/latest.json"
+  ]
+}
