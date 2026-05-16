@@ -38,11 +38,12 @@ export interface AppStatus {
 
 /** Server → Client. */
 export type ServerMessage =
-    | { type: "hello";    appId: string;  status: AppStatus }
-    | { type: "log";      appId: string;  kind: RunnerKind;  stream: "stdout" | "stderr"; text: string; ts: number }
-    | { type: "status";   appId: string;  status: AppStatus }
-    | { type: "exit";     appId: string;  kind: RunnerKind;  exitCode: number | null; signal: string | null; ts: number }
-    | { type: "error";    message: string };
+    | { type: "hello";      appId: string;  status: AppStatus }
+    | { type: "log";        appId: string;  kind: RunnerKind;  stream: "stdout" | "stderr"; text: string; ts: number }
+    | { type: "status";     appId: string;  status: AppStatus }
+    | { type: "exit";       appId: string;  kind: RunnerKind;  exitCode: number | null; signal: string | null; ts: number }
+    | { type: "screenshot"; appId: string;  ts: number; png_b64: string; mime: "image/png"; bytes: number }
+    | { type: "error";      message: string };
 
 /** Client → Server. */
 export type ClientMessage =

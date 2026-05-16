@@ -21,6 +21,8 @@ import { AppsRunner }     from "./apps/runner.js";
 import { buildApp }       from "./app.js";
 import { attachWebSocketBroker } from "./ws/handler.js";
 import { WebRTCBroker } from "./capture/webrtc-broker.js";
+import { ScreenshotStreamer } from "./capture/screenshot-stream.js";
+import { RuntimeStreamPrefs } from "./runtime/stream-prefs.js";
 import { logger } from "./shared/logger.js";
 
 const BACKEND_PORT  = Number(process.env.CUSTOS_PORT          ?? 7676);
@@ -57,13 +59,20 @@ async function main() {
     const registry = new AppsRegistry(cfg.apps);
     const runner   = new AppsRunner(registry);
     const broker   = new WebRTCBroker();
+    const prefs    = new RuntimeStreamPrefs();
+    const streamer = new ScreenshotStreamer(registry, prefs);
 
     runner.on("exit", (appId, kind) => {
-        if (kind === "run") broker.closeAllForApp(appId);
+        if (kind === "run") {
+            broker.closeAllForApp(appId);
+            // アプリ終了で auto-stream も止める。再起動後 subscribe があれば
+            // streamer.acquire 経由で再開される。
+            streamer.stop(appId);
+        }
     });
 
     // 単一の app instance を 2 ポートで listen させる。
-    const app = buildApp({ registry, runner, broker });
+    const app = buildApp({ registry, runner, broker, prefs });
     const servers: HttpServer[] = [];
 
     const ports: { port: number; label: string }[] = [];
@@ -77,7 +86,7 @@ async function main() {
             logger.info({ host: info.address, port: info.port, label }, "listening");
         });
         // WS broker は全ポートで attach する (どちらに繋いでも /ws が動く)。
-        attachWebSocketBroker(s as unknown as HttpServer, { registry, runner }, "/ws");
+        attachWebSocketBroker(s as unknown as HttpServer, { registry, runner, streamer }, "/ws");
         servers.push(s as unknown as HttpServer);
     }
 
@@ -89,6 +98,7 @@ async function main() {
     const shutdown = (sig: NodeJS.Signals) => {
         logger.info({ sig }, "shutting down");
         broker.shutdown();
+        streamer.shutdown();
         runner.shutdown();
         for (const s of servers) {
             try { s.close(); } catch { /* ignore */ }

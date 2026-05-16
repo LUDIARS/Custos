@@ -79,6 +79,13 @@ const btnSnapshot       = $("btnSnapshot");
 const btnStreamStart    = $("btnStreamStart");
 const btnStreamStop     = $("btnStreamStop");
 const btnDownload       = $("btnDownload");
+// settings tab
+const settingsForm      = $("settingsForm");
+const settingIntervalEl = $("settingIntervalSec");
+const settingMaxWidthEl = $("settingMaxWidth");
+const settingResetBtn   = $("settingReset");
+const settingStatusEl   = $("settingStatus");
+const settingsCurrentEl = $("settingsCurrent");
 
 // ─── state ──────────────────────────────────────
 const state = {
@@ -88,6 +95,7 @@ const state = {
     selectedConfig: null,
     captureSessionId: null,    // WebRTC session (if streaming)
     lastShotUrl: null,         // blob: URL for the latest snapshot (for download)
+    boot:   { pending: false, appId: null },  // BOOT (build → run) チェイン状態
 };
 const CAPTURE_MODE_KEY = "custos.captureMode";
 
@@ -97,7 +105,7 @@ async function boot() {
     // backend を立てるか、CERNERE_URL を設定しない anonymous モード。
     await loadApps();
     appSelect.addEventListener("change", onAppChange);
-    btnBuild.addEventListener("click", () => apiAction("build"));
+    btnBuild.addEventListener("click", () => bootApp());
     btnRun  .addEventListener("click", () => apiAction("run"));
     btnTest .addEventListener("click", () => apiAction("test"));
     btnKill .addEventListener("click", () => apiAction("kill"));
@@ -119,6 +127,7 @@ async function boot() {
         testStream.textContent = "";
     });
     for (const t of mainTabs) t.addEventListener("click", () => switchMainTab(t.dataset.tab));
+    setupSettingsTab();
     connectWs();
 }
 
@@ -126,6 +135,81 @@ function switchMainTab(tabId) {
     for (const t of mainTabs)   t.classList.toggle("active", t.dataset.tab === tabId);
     for (const t of mainTabs)   t.setAttribute("aria-selected", String(t.dataset.tab === tabId));
     for (const p of mainPanels) p.classList.toggle("active", p.dataset.tab === tabId);
+    if (tabId === "settings") loadStreamPrefs().catch(() => {});
+}
+
+// ─── settings tab ──────────────────────────────
+
+function setupSettingsTab() {
+    if (!settingsForm) return;
+    settingsForm.addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        await saveStreamPrefs();
+    });
+    settingResetBtn.addEventListener("click", async () => {
+        // null patch でクリア → apps.json 既定値に戻る
+        await putStreamPrefs({ intervalSec: null, maxWidth: null });
+        settingIntervalEl.value = "";
+        settingMaxWidthEl.value = "";
+        setSettingStatus("Reset to defaults", "ok");
+    });
+}
+
+async function loadStreamPrefs() {
+    try {
+        const res = await apiFetch("/settings/stream");
+        if (!res.ok) {
+            setSettingStatus(`HTTP ${res.status}`, "err");
+            return;
+        }
+        const j = await res.json();
+        const p = j.prefs ?? {};
+        settingIntervalEl.value = p.intervalSec !== undefined ? String(p.intervalSec) : "";
+        settingMaxWidthEl.value = p.maxWidth    !== undefined ? String(p.maxWidth)    : "";
+        settingsCurrentEl.textContent = JSON.stringify(p, null, 2);
+        setSettingStatus("", "");
+    } catch (err) {
+        setSettingStatus(`load error: ${err.message ?? err}`, "err");
+    }
+}
+
+async function saveStreamPrefs() {
+    const patch = {};
+    const ivRaw = settingIntervalEl.value.trim();
+    const mwRaw = settingMaxWidthEl.value.trim();
+    patch.intervalSec = ivRaw === "" ? null : Number(ivRaw);
+    patch.maxWidth    = mwRaw === "" ? null : Number(mwRaw);
+    if (Number.isNaN(patch.intervalSec) || (patch.intervalSec !== null && patch.intervalSec < 0)) {
+        setSettingStatus("intervalSec が不正", "err"); return;
+    }
+    if (Number.isNaN(patch.maxWidth) || (patch.maxWidth !== null && patch.maxWidth < 0)) {
+        setSettingStatus("maxWidth が不正", "err"); return;
+    }
+    await putStreamPrefs(patch);
+}
+
+async function putStreamPrefs(patch) {
+    try {
+        const res = await apiFetch("/settings/stream", {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(patch),
+        });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok || j.ok === false) {
+            setSettingStatus(`save failed: ${j.error ?? `HTTP ${res.status}`}`, "err");
+            return;
+        }
+        settingsCurrentEl.textContent = JSON.stringify(j.prefs ?? {}, null, 2);
+        setSettingStatus("Saved — applied immediately", "ok");
+    } catch (err) {
+        setSettingStatus(`save error: ${err.message ?? err}`, "err");
+    }
+}
+
+function setSettingStatus(msg, kind) {
+    settingStatusEl.textContent = msg;
+    settingStatusEl.className   = "settings-status" + (kind ? " " + kind : "");
 }
 
 function applyCaptureMode() {
@@ -187,6 +271,11 @@ function opt(value, label) {
 
 async function onAppChange() {
     const id = appSelect.value;
+    // 別 app に切り替えたら未完了 BOOT チェインは捨てる (前 app の build exit で
+    // 別 app の run が走ったら混乱の元)。
+    if (state.boot.pending && state.boot.appId !== id) {
+        state.boot = { pending: false, appId: null };
+    }
     state.appId = id || null;
     state.selectedConfig = state.apps.find((a) => a.config.id === id)?.config ?? null;
     renderVirtualKeys();
@@ -261,7 +350,8 @@ function applyStatus(status) {
 function updateActionButtons() {
     const cfg = state.selectedConfig;
     const has = Boolean(cfg);
-    btnBuild.disabled = !(has && cfg.hasBuild);
+    // BOOT は build が無いアプリでも押せる (その場合は run 直行)。
+    btnBuild.disabled = !has;
     btnRun  .disabled = !has;
     btnTest .disabled = !(has && cfg.hasTest);
     btnKill .disabled = !has;
@@ -285,27 +375,198 @@ function renderVirtualKeys() {
         vkGrid.appendChild(empty);
         return;
     }
+
+    // ── ラベル + key からゲームパッドの slot を推定 ──
+    // 同じ slot に複数アサインがあったら最初の 1 つだけ採用、残りは extras 行へ。
+    const slots = {
+        dpad:    { up:null, down:null, left:null, right:null },
+        stick:   { up:null, down:null, left:null, right:null },
+        actions: { a:null,  b:null,    x:null,    y:null },
+        shoulder:{ lb:null, rb:null,   lt:null,   rt:null },
+        menu:    [],   // Pause/Start/Select 系
+        extras:  [],   // 何処にも入らなかった分
+    };
     for (const b of buttons) {
-        const id = labelToId(b.label);
-        const el = document.createElement("button");
-        el.className = "vk-button";
-        if (b.action) el.dataset.action = b.action;
-        el.dataset.id = id;
-        const label = document.createElement("span");
-        label.textContent = b.label;
-        el.appendChild(label);
-        if (b.key)    el.appendChild(hint(`KEY · ${b.key}`));
-        if (b.action) el.appendChild(hint(`ACTION · ${b.action}`));
-        el.addEventListener("click", () => triggerButton(b, id));
-        vkGrid.appendChild(el);
+        const slot = classifyButton(b);
+        if (slot.zone === "menu")    { slots.menu.push(b); continue; }
+        if (slot.zone === "extras")  { slots.extras.push(b); continue; }
+        const target = slots[slot.zone][slot.slot];
+        if (target == null) slots[slot.zone][slot.slot] = b;
+        else                slots.extras.push(b);  // 衝突したら extras 落ち
     }
+
+    const pad = document.createElement("div");
+    pad.className = "vk-pad";
+
+    // ── shoulders 行 ──
+    const shoulderRow = document.createElement("div");
+    shoulderRow.className = "vk-zone vk-zone-shoulder";
+    const sLeft  = document.createElement("div"); sLeft.className  = "vk-shoulder-row left";
+    const sRight = document.createElement("div"); sRight.className = "vk-shoulder-row right";
+    appendGamepadButton(sLeft,  slots.shoulder.lt, "LT");
+    appendGamepadButton(sLeft,  slots.shoulder.lb, "LB");
+    appendGamepadButton(sRight, slots.shoulder.rb, "RB");
+    appendGamepadButton(sRight, slots.shoulder.rt, "RT");
+    shoulderRow.appendChild(sLeft); shoulderRow.appendChild(sRight);
+    if (sLeft.children.length || sRight.children.length) pad.appendChild(shoulderRow);
+
+    // ── D-pad ──
+    if (Object.values(slots.dpad).some((v) => v)) {
+        pad.appendChild(makePlusZone("vk-zone-dpad", "D-PAD", slots.dpad));
+    }
+
+    // ── center menu (Pause / Start) ──
+    if (slots.menu.length) {
+        const menuZone = document.createElement("div");
+        menuZone.className = "vk-zone vk-zone-menu";
+        const lbl = document.createElement("div"); lbl.className = "vk-zone-label"; lbl.textContent = "MENU";
+        menuZone.appendChild(lbl);
+        for (const b of slots.menu) appendGamepadButton(menuZone, b, b.label, { kind: "menu" });
+        pad.appendChild(menuZone);
+    }
+
+    // ── actions diamond (ABXY) ──
+    if (Object.values(slots.actions).some((v) => v)) {
+        const z = document.createElement("div");
+        z.className = "vk-zone vk-zone-actions";
+        const diamond = document.createElement("div");
+        diamond.className = "vk-diamond";
+        appendGamepadButton(diamond, slots.actions.y, "Y", { area: "y", kind: "act-y" });
+        appendGamepadButton(diamond, slots.actions.x, "X", { area: "x", kind: "act-x" });
+        appendGamepadButton(diamond, slots.actions.b, "B", { area: "b", kind: "act-b" });
+        appendGamepadButton(diamond, slots.actions.a, "A", { area: "a", kind: "act-a" });
+        z.appendChild(diamond);
+        const lbl = document.createElement("div"); lbl.className = "vk-zone-label"; lbl.textContent = "ACTIONS";
+        z.appendChild(lbl);
+        pad.appendChild(z);
+    }
+
+    // ── L stick (WASD) ──
+    if (Object.values(slots.stick).some((v) => v)) {
+        pad.appendChild(makePlusZone("vk-zone-stick", "L-STICK", slots.stick));
+    }
+
+    // ── extras row (kill / 余り) ──
+    if (slots.extras.length) {
+        const z = document.createElement("div");
+        z.className = "vk-zone vk-zone-extras";
+        for (const b of slots.extras) appendGamepadButton(z, b, b.label, { kind: "extras" });
+        pad.appendChild(z);
+    }
+
+    vkGrid.appendChild(pad);
 }
 
-function hint(text) {
-    const span = document.createElement("span");
-    span.className = "vk-key-hint";
-    span.textContent = text;
-    return span;
+/// 上下左右 4 方向の十字 zone (D-pad / stick) を組み立てる。
+function makePlusZone(zoneClass, label, slot) {
+    const z = document.createElement("div");
+    z.className = "vk-zone " + zoneClass;
+    const cluster = document.createElement("div");
+    cluster.className = "vk-plus";
+    appendGamepadButton(cluster, slot.up,    "↑", { area: "up",    kind: "dir" });
+    appendGamepadButton(cluster, slot.left,  "←", { area: "left",  kind: "dir" });
+    appendGamepadButton(cluster, slot.right, "→", { area: "right", kind: "dir" });
+    appendGamepadButton(cluster, slot.down,  "↓", { area: "down",  kind: "dir" });
+    z.appendChild(cluster);
+    const lbl = document.createElement("div"); lbl.className = "vk-zone-label"; lbl.textContent = label;
+    z.appendChild(lbl);
+    return z;
+}
+
+/// 1 ボタンを container に追加。`b` が null なら placeholder (空マス)。
+/// 通常ボタンは pointerdown→key down / pointerup→key up の press-and-hold、
+/// `action` ボタン (= kill 等) は単発 click。
+function appendGamepadButton(container, b, fallbackLabel, opts = {}) {
+    const el = document.createElement("button");
+    el.type = "button";
+    el.className = "vk-btn";
+    if (opts.area) el.style.gridArea = opts.area;
+    if (opts.kind) el.dataset.kind = opts.kind;
+
+    if (!b) {
+        el.classList.add("placeholder");
+        el.textContent = fallbackLabel;
+        el.disabled = true;
+        container.appendChild(el);
+        return;
+    }
+    if (b.action) el.dataset.action = b.action;
+    el.dataset.id = labelToId(b.label);
+    el.textContent = b.label || fallbackLabel;
+    if (b.key) {
+        const k = document.createElement("span");
+        k.className = "vk-keytag";
+        k.textContent = b.key;
+        el.appendChild(k);
+    }
+    if (b.action === "kill") el.classList.add("danger");
+
+    if (b.action) {
+        // 単発 action (kill 等)。
+        el.addEventListener("click", () => triggerButton(b, el.dataset.id));
+    } else if (b.key) {
+        // press-and-hold。pointerdown/up/cancel/leave で down/up を出す。
+        // wsSend が `key` を投げると ws/handler 側の sendKey → ergoCustos
+        // POST /key で実アプリにキーが入る。
+        const press   = (ev) => { ev.preventDefault(); sendKeyHold(b.key, true,  el); };
+        const release = (ev) => { ev.preventDefault(); sendKeyHold(b.key, false, el); };
+        el.addEventListener("pointerdown",   press);
+        el.addEventListener("pointerup",     release);
+        el.addEventListener("pointercancel", release);
+        el.addEventListener("pointerleave",  release);
+    }
+    container.appendChild(el);
+}
+
+/// down/up の重複送信を防ぐ簡易ガード (pointerdown と touchstart 二重発火対策)。
+function sendKeyHold(key, down, el) {
+    const flag = `_held_${key}`;
+    if (el.dataset[flag] === (down ? "1" : "")) return;
+    el.dataset[flag] = down ? "1" : "";
+    if (down) el.classList.add("active");
+    else      el.classList.remove("active");
+    if (!state.appId) return;
+    wsSend({ type: "key", appId: state.appId, key, down });
+}
+
+/// `b.label` / `b.key` から表示位置 (slot) を推定。`key` を最優先で見るので
+/// 「Left キー (D-pad) と Left (key=A, WASD) ラベル」を取り違えない。
+function classifyButton(b) {
+    if (b.action) return { zone: "extras" };
+    const key = (b.key ?? "").trim();
+    const lab = (b.label ?? "").trim();
+    const labL = lab.toLowerCase();
+
+    // D-pad (矢印キー実体)
+    if (key === "Up")    return { zone: "dpad", slot: "up" };
+    if (key === "Down")  return { zone: "dpad", slot: "down" };
+    if (key === "Left")  return { zone: "dpad", slot: "left" };
+    if (key === "Right") return { zone: "dpad", slot: "right" };
+
+    // L-stick (WASD)
+    if (key === "W") return { zone: "stick", slot: "up" };
+    if (key === "S") return { zone: "stick", slot: "down" };
+    if (key === "A") return { zone: "stick", slot: "left" };
+    if (key === "D") return { zone: "stick", slot: "right" };
+
+    // Shoulders
+    if (/^lb$|^l1$/i.test(lab)) return { zone: "shoulder", slot: "lb" };
+    if (/^rb$|^r1$/i.test(lab)) return { zone: "shoulder", slot: "rb" };
+    if (/^lt$|^l2$/i.test(lab)) return { zone: "shoulder", slot: "lt" };
+    if (/^rt$|^r2$/i.test(lab)) return { zone: "shoulder", slot: "rt" };
+
+    // Center menu
+    if (key === "Escape" || /^pause$|^menu$|^start$|^select$|^back$/i.test(lab)) {
+        return { zone: "menu" };
+    }
+
+    // Action buttons (label 優先 / key=Space は A、その他はラベル名で判定)
+    if (lab === "A" || /^jump$/i.test(labL) || key === "Space") return { zone: "actions", slot: "a" };
+    if (lab === "B" || /^attack$/i.test(labL))                  return { zone: "actions", slot: "b" };
+    if (lab === "X" || /^special$|^dodge$/i.test(labL))         return { zone: "actions", slot: "x" };
+    if (lab === "Y" || /^skill$|^use$/i.test(labL))             return { zone: "actions", slot: "y" };
+
+    return { zone: "extras" };
 }
 
 function labelToId(label) {
@@ -328,12 +589,33 @@ async function apiAction(kind) {
         const json = await res.json();
         if (!res.ok || json.ok === false) {
             appendLog({ kind: "meta", stream: "stderr", text: `[${kind}] failed: ${json.error ?? res.status}\n` });
-        } else {
-            appendLog({ kind: "meta", stream: "stdout", text: `[${kind}] accepted (${kind === "kill" ? "killed=" + json.ok : Object.keys(json).filter((k) => k !== "ok").join(", ")})\n` });
+            return false;
         }
+        appendLog({ kind: "meta", stream: "stdout", text: `[${kind}] accepted (${kind === "kill" ? "killed=" + json.ok : Object.keys(json).filter((k) => k !== "ok").join(", ")})\n` });
+        return true;
     } catch (err) {
         appendLog({ kind: "meta", stream: "stderr", text: `[${kind}] network error: ${err.message ?? err}\n` });
+        return false;
     }
+}
+
+/// BOOT: build があれば build を蹴り、build exit (success) を待ってから run。
+/// build が無い app はそのまま run。WS の `exit` メッセージで継続するので
+/// バックエンドへの round-trip は最小限。チェイン中に他の build/run が
+/// 走り出したら自動キャンセル (state.boot.pending = false に戻す)。
+async function bootApp() {
+    if (!state.appId) return;
+    const cfg = state.selectedConfig;
+    if (!cfg) return;
+    if (!cfg.hasBuild) {
+        appendLog({ kind: "meta", stream: "stdout", text: "[boot] no build step — going straight to run\n" });
+        await apiAction("run");
+        return;
+    }
+    state.boot = { pending: true, appId: state.appId };
+    appendLog({ kind: "meta", stream: "stdout", text: "[boot] build → run chain started\n" });
+    const ok = await apiAction("build");
+    if (!ok) state.boot = { pending: false, appId: null };
 }
 
 // ─── capture (WebRTC) ─────────────────────────
@@ -425,6 +707,30 @@ function handleServerMessage(msg) {
                 kind: msg.kind, stream: "stdout",
                 text: `[exit] ${msg.kind} exitCode=${msg.exitCode} signal=${msg.signal ?? "-"}\n`,
             });
+            // BOOT チェイン: build が成功したら自動で run を蹴る。
+            // appId が一致するときだけ反応 (別 app に切り替えてたら捨てる)。
+            if (state.boot.pending && state.boot.appId === msg.appId && msg.kind === "build") {
+                if (msg.exitCode === 0) {
+                    appendLog({ kind: "meta", stream: "stdout", text: "[boot] build OK → starting run\n" });
+                    state.boot = { pending: false, appId: null };
+                    apiAction("run").catch(() => {});
+                } else {
+                    appendLog({ kind: "meta", stream: "stderr", text: `[boot] aborted — build failed (exitCode=${msg.exitCode})\n` });
+                    state.boot = { pending: false, appId: null };
+                }
+            }
+            return;
+        case "screenshot":
+            // サーバー側 ScreenshotStreamer から N 秒ごとに飛んでくる auto-frame。
+            // snapshot モードのときだけ画面に反映 (webrtc モード時は <video> を
+            // 邪魔しないよう無視)。snapshot ボタンの blob URL とは独立して
+            // data: URL を当てるので、Snapshot 押下とも干渉しない。
+            if (captureMode.value !== "snapshot") return;
+            if (msg.appId !== state.appId) return;
+            streamImage.src = `data:${msg.mime};base64,${msg.png_b64}`;
+            streamImage.classList.add("active");
+            streamVideo.classList.remove("active");
+            streamPlaceholder.style.display = "none";
             return;
         case "error":
             appendLog({ kind: "meta", stream: "stderr", text: `[ws-error] ${msg.message}\n` });

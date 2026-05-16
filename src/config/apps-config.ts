@@ -56,6 +56,14 @@ const captureSchema = z.object({
     fps: z.number().int().min(1).max(60).default(30),
     /** ffmpeg preset (encoder dependent)。 */
     preset: z.string().default("veryfast"),
+    /**
+     * snapshot モードの自動配信間隔 (秒)。subscribe 中の WS クライアントに
+     * `{ type: "screenshot" }` フレームを N 秒ごとに push する。
+     * `0` で auto-stream を無効化 (REST `POST /screenshot` は使える)。
+     * 既定 1.0 秒。`apps.json` の数値か、起動時 env
+     * `CUSTOS_SCREENSHOT_INTERVAL_SEC` で全アプリ一括上書き可。
+     */
+    intervalSec: z.number().min(0).max(60).default(1),
 });
 
 const buttonSchema = z.object({

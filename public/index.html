@@ -2,7 +2,9 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <!-- iOS 13+ は user-scalable=no を無視するので touch-action でも止める (styles.css) -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Custos — Remote Test Runner</title>
   <link rel="stylesheet" href="/css/styles.css">
 </head>
@@ -13,7 +15,7 @@
       <select id="appSelect" aria-label="アプリ選択">
         <option value="">— 起動対象を選択 —</option>
       </select>
-      <button id="btnBuild" class="action build" disabled>Build</button>
+      <button id="btnBuild" class="action build" disabled title="Build → Run を一気に流す (build が無い app は Run のみ)">BOOT</button>
       <button id="btnRun"   class="action run"   disabled>Run</button>
       <button id="btnTest"  class="action test"  disabled>Test</button>
       <button id="btnKill"  class="action kill"  disabled>Kill</button>
@@ -25,7 +27,8 @@
   <nav class="main-tabs" role="tablist" aria-label="メインビュー切替">
     <button class="main-tab active" data-tab="view"  role="tab" aria-selected="true"  id="mainTabView">VIEW</button>
     <button class="main-tab"        data-tab="logs"  role="tab" aria-selected="false" id="mainTabLogs">LOG</button>
-    <button class="main-tab"        data-tab="tests" role="tab" aria-selected="false" id="mainTabTests">TEST</button>
+    <button class="main-tab"        data-tab="tests"    role="tab" aria-selected="false" id="mainTabTests">TEST</button>
+    <button class="main-tab"        data-tab="settings" role="tab" aria-selected="false" id="mainTabSettings">SETTINGS</button>
     <span class="main-tabs-spacer"></span>
     <button id="btnClearOutput" class="ghost" type="button">Clear</button>
   </nav>
@@ -80,6 +83,40 @@
     <!-- ─── TEST タブ ────────────────────────────── -->
     <section class="main-panel" data-tab="tests" id="panelTests">
       <pre class="log-stream" id="testStream"></pre>
+    </section>
+
+    <!-- ─── SETTINGS タブ (runtime オーバーライド) ─── -->
+    <section class="main-panel" data-tab="settings" id="panelSettings">
+      <div class="settings-card">
+        <h2>Stream settings</h2>
+        <p class="settings-hint">
+          スナップショット (auto-stream) の <strong>転送間隔</strong> と
+          <strong>最大解像度</strong> を上書き。サーバー側に保持されるので
+          全クライアントに影響します。Custos 再起動でリセット
+          (apps.json の既定値に戻る)。
+        </p>
+        <form id="settingsForm" class="settings-form" autocomplete="off">
+          <label>
+            転送間隔 <span class="unit">(秒)</span>
+            <input type="number" id="settingIntervalSec" min="0" max="60" step="0.1" inputmode="decimal" />
+            <small>0 で auto-stream を停止。空欄で apps.json 既定値に戻す。</small>
+          </label>
+          <label>
+            最大解像度 (横) <span class="unit">(px)</span>
+            <input type="number" id="settingMaxWidth" min="0" max="7680" step="1" inputmode="numeric" />
+            <small>0 / 空欄で元解像度のまま。指定時は ffmpeg で縮小してから配信。</small>
+          </label>
+          <div class="settings-actions">
+            <button type="submit" id="settingSave" class="primary">Save</button>
+            <button type="button" id="settingReset" class="ghost">Reset to defaults</button>
+            <span id="settingStatus" class="settings-status"></span>
+          </div>
+        </form>
+        <div class="settings-current">
+          <h3>Current overrides</h3>
+          <pre id="settingsCurrent">…</pre>
+        </div>
+      </div>
     </section>
 
   </main>

@@ -101,6 +101,31 @@
     },
 
     {
+      "id": "desktop-capture",
+      "name": "Desktop Capture (WebRTC test)",
+      "description": "デスクトップ全体を WebRTC で配信する検証用 entry。特定アプリのウィンドウに依存しないので、capture パイプライン (ffmpeg gdigrab desktop → RTP → werift) の疎通確認に使える。build/run/test は無く capture 専用。",
+      "target": "desktop",
+
+      "run": {
+        "workingDir": ".",
+        "cmd": "cmd.exe",
+        "args": ["/c", "echo", "desktop-capture is a capture-only entry"]
+      },
+
+      "capture": {
+        "type": "fullscreen",
+        "fps": 15,
+        "preset": "veryfast"
+      },
+      "input": {
+        "buttons": [],
+        "allowKeyboard": false,
+        "allowMouse": false
+      },
+      "logs": { "stdout": true, "stderr": true, "files": [] }
+    },
+
+    {
       "id": "pictor-mobile-demo",
       "name": "Pictor Mobile Demo",
       "description": "Pictor の mobile pipeline simulation (headless console)。",

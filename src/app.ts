@@ -13,12 +13,14 @@ import { logger as honoLogger } from "hono/logger";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createAppsRoutes } from "./routes/apps-routes.js";
-import { createRtcRoutes }  from "./routes/rtc-routes.js";
+import { createAppsRoutes }     from "./routes/apps-routes.js";
+import { createRtcRoutes }      from "./routes/rtc-routes.js";
+import { createSettingsRoutes } from "./routes/settings-routes.js";
 import { cernereAuthMiddleware } from "./auth/middleware.js";
 import type { AppsRegistry } from "./apps/registry.js";
 import type { AppsRunner }   from "./apps/runner.js";
 import type { WebRTCBroker } from "./capture/webrtc-broker.js";
+import type { RuntimeStreamPrefs } from "./runtime/stream-prefs.js";
 import { getResolvedEncoder } from "./capture/ffmpeg-pipeline.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -27,9 +29,10 @@ export interface AppDeps {
     registry: AppsRegistry;
     runner:   AppsRunner;
     broker:   WebRTCBroker;
+    prefs:    RuntimeStreamPrefs;
 }
 
-export function buildApp({ registry, runner, broker }: AppDeps) {
+export function buildApp({ registry, runner, broker, prefs }: AppDeps) {
     const app = new Hono();
 
     app.use("*", honoLogger());
@@ -63,6 +66,10 @@ export function buildApp({ registry, runner, broker }: AppDeps) {
     app.use("/api/apps/*", cernereAuthMiddleware());
     app.route("/api/apps", createAppsRoutes({ registry, runner }));
     app.route("/api/apps", createRtcRoutes({ registry, broker }));
+
+    // /api/settings/* — runtime 上書き面 (設定タブ)。
+    app.use("/api/settings/*", cernereAuthMiddleware());
+    app.route("/api/settings", createSettingsRoutes({ prefs }));
 
     // 静的ファイル。tsx で動かすときも dist 経由のときも src/ の隣の public/ を見る。
     const publicRoot = resolve(__dirname, "..", "public");

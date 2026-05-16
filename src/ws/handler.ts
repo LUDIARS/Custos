@@ -23,6 +23,7 @@ import type {
 } from "../shared/types.js";
 import { sendKey, sendClick } from "../input/forwarder.js";
 import { getCernereAuth, type VerifiedUser } from "../auth/cernere-auth.js";
+import type { ScreenshotStreamer, ScreenshotFrame } from "../capture/screenshot-stream.js";
 
 const log = childLogger("ws");
 
@@ -34,8 +35,9 @@ interface Session {
 }
 
 export interface WsBrokerDeps {
-    registry: AppsRegistry;
-    runner:   AppsRunner;
+    registry:   AppsRegistry;
+    runner:     AppsRunner;
+    streamer:   ScreenshotStreamer;
 }
 
 export function attachWebSocketBroker(
@@ -77,6 +79,8 @@ export function attachWebSocketBroker(
         });
 
         ws.on("close", () => {
+            // 切断 session が持っていた auto-stream 購読を一括 release。
+            deps.streamer.releaseAll(session.id);
             sessions.delete(session.id);
             log.info({ sessionId: session.id }, "ws disconnected");
         });
@@ -103,13 +107,34 @@ export function attachWebSocketBroker(
         }
     });
 
+    // ── screenshot streamer からの自動配信 ──
+    // capture / ergoCustos が設定された app に subscribe しているクライアント
+    // 全員に N 秒ごとの PNG を base64 で push。binary フレームを使わないのは
+    // 既存の app.js が JSON only で実装されているのを壊さないため。
+    deps.streamer.on("frame", (frame: ScreenshotFrame) => {
+        const png_b64 = frame.png.toString("base64");
+        const bytes   = frame.png.length;
+        for (const s of sessions.values()) {
+            if (s.appIds.has(frame.appId)) {
+                send(s.ws, {
+                    type:    "screenshot",
+                    appId:   frame.appId,
+                    ts:      frame.ts,
+                    png_b64,
+                    mime:    "image/png",
+                    bytes,
+                });
+            }
+        }
+    });
+
     return wss;
 }
 
 async function handleClient(
     session: Session,
     msg: ClientMessage,
-    { registry }: WsBrokerDeps,
+    { registry, streamer }: WsBrokerDeps,
 ): Promise<void> {
     switch (msg.type) {
         case "subscribe": {
@@ -121,10 +146,13 @@ async function handleClient(
             session.appIds.add(msg.appId);
             const status = registry.getStatus(msg.appId);
             if (status) send(session.ws, { type: "hello", appId: msg.appId, status });
+            // capture / ergoCustos 持ちの app は自動 stream を開始 (refcount)。
+            streamer.acquire(cfg, session.id);
             return;
         }
         case "unsubscribe": {
             session.appIds.delete(msg.appId);
+            streamer.release(msg.appId, session.id);
             return;
         }
         case "key": {

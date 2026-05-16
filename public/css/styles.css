@@ -20,12 +20,27 @@
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; height: 100%; }
+html {
+  /* iOS Safari がダブルタップで自動ズームするのを抑止 (user-scalable=no
+   * だけでは効かないため touch-action でも止める)。pan-* は許して
+   * ふつうのスクロールは保つ。 */
+  touch-action: pan-x pan-y;
+}
 body {
   background: var(--bg);
   color: var(--fg);
   font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
   display: flex; flex-direction: column;
   overflow: hidden;
+  /* iOS で長押しメニュー / テキスト選択ハイライトを抑止 (UI 用途のため)。 */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+/* インタラクティブ要素は manipulation で 300ms 遅延 + ダブルタップズームを完全に切る。 */
+button, .vk-btn, select, input, a {
+  touch-action: manipulation;
 }
 
 /* ─── header ─── */
@@ -282,3 +297,195 @@ button.ghost { background: transparent; border-color: var(--border); color: var(
 .ws-status.disconnected::before { background: var(--danger); }
 .grow { flex: 1 1 auto; }
 .hint { color: var(--fg-faint); }
+
+/* ─── settings panel ─── */
+.settings-card {
+  max-width: 720px;
+  margin: 16px auto;
+  padding: 18px 22px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.settings-card h2 { margin: 0 0 4px; font-size: 16px; }
+.settings-hint    { margin: 0 0 16px; font-size: 12px; color: var(--fg-dim); line-height: 1.5; }
+.settings-form    { display: flex; flex-direction: column; gap: 14px; }
+.settings-form label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 13px; color: var(--fg);
+}
+.settings-form label .unit { color: var(--fg-faint); font-weight: 400; margin-left: 4px; }
+.settings-form input {
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 6px 10px; font: inherit;
+  width: 220px;
+}
+.settings-form small { color: var(--fg-faint); font-size: 11px; }
+.settings-actions {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 4px;
+}
+.settings-actions button.primary {
+  background: var(--accent); color: var(--bg);
+  border: 1px solid var(--accent); border-radius: 4px;
+  padding: 6px 14px; font: inherit; font-weight: 600;
+  cursor: pointer;
+}
+.settings-actions button.primary:hover { filter: brightness(1.1); }
+.settings-status { font-size: 12px; color: var(--fg-dim); }
+.settings-status.ok  { color: var(--ok); }
+.settings-status.err { color: var(--danger); }
+.settings-current { margin-top: 18px; }
+.settings-current h3 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg-faint); }
+.settings-current pre {
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 8px 12px; font: inherit; font-size: 12px;
+  overflow: auto;
+}
+
+/* ─── virtual gamepad layout ──────────────────────────── */
+.vk-pad {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(70px, 0.6fr) minmax(140px, 1fr);
+  grid-template-rows: auto auto auto auto;
+  gap: 14px;
+  padding: 14px 12px;
+  align-items: start;
+}
+.vk-zone           { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.vk-zone-label     {
+  font-size: 10px; letter-spacing: 0.12em; color: var(--fg-faint);
+  text-transform: uppercase;
+}
+.vk-zone-shoulder  {
+  grid-column: 1 / -1; grid-row: 1;
+  display: flex; flex-direction: row; justify-content: space-between;
+  padding: 0 8px;
+}
+.vk-shoulder-row   { display: flex; gap: 6px; }
+.vk-zone-dpad      { grid-column: 1; grid-row: 2; }
+.vk-zone-menu      { grid-column: 2; grid-row: 2; align-self: center; }
+.vk-zone-actions   { grid-column: 3; grid-row: 2; }
+.vk-zone-stick     { grid-column: 1; grid-row: 3; }
+.vk-zone-extras    {
+  grid-column: 1 / -1; grid-row: 4;
+  display: flex; flex-direction: row; flex-wrap: wrap; gap: 8px; justify-content: center;
+}
+
+/* + (D-pad / stick) クラスタ — 3×3 grid の中で十字型に配置 */
+.vk-plus {
+  display: grid;
+  grid-template:
+    ".    up    .   "
+    "left .     right"
+    ".    down  .   " / 1fr 1fr 1fr;
+  gap: 4px;
+  width: 144px; height: 144px;
+}
+.vk-zone-stick .vk-plus { width: 132px; height: 132px; }
+
+/* ◇ (action diamond) — 同じ 3×3 grid */
+.vk-diamond {
+  display: grid;
+  grid-template:
+    ".  y  . "
+    "x  .  b "
+    ".  a  . " / 1fr 1fr 1fr;
+  gap: 4px;
+  width: 144px; height: 144px;
+}
+
+/* ボタン本体 */
+.vk-btn {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 48px; min-height: 44px;
+  padding: 6px 10px;
+  background: var(--bg-alt);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: 600 13px/1 system-ui, sans-serif;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform 60ms ease, background 80ms ease, box-shadow 80ms ease;
+}
+.vk-btn:hover:not(:disabled):not(.placeholder) { border-color: var(--accent); }
+.vk-btn.active, .vk-btn:active {
+  transform: translateY(1px);
+  background: #2a3556;
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.vk-btn.placeholder {
+  background: transparent;
+  color: var(--fg-faint);
+  border-style: dashed;
+  cursor: default;
+  opacity: 0.4;
+}
+.vk-btn.danger {
+  border-color: var(--kill);
+  color: var(--kill);
+}
+.vk-btn.danger:hover { background: rgba(255,80,80,0.08); }
+
+/* 円形 (D-pad / 方向 / アクション) */
+.vk-btn[data-kind="dir"],
+.vk-btn[data-kind^="act-"] {
+  border-radius: 50%;
+  font-size: 18px;
+  min-width: 0; min-height: 0;
+  width: 100%; height: 100%;
+  padding: 0;
+}
+
+/* Xbox 配色 (controller 慣習に合わせる) */
+.vk-btn[data-kind="act-a"] { color: #98e6a0; border-color: rgba(72,200,120,0.55); }
+.vk-btn[data-kind="act-b"] { color: #f08e8a; border-color: rgba(220,80,80,0.55); }
+.vk-btn[data-kind="act-x"] { color: #8fb4ff; border-color: rgba(80,130,255,0.55); }
+.vk-btn[data-kind="act-y"] { color: #f0d680; border-color: rgba(220,180,80,0.55); }
+.vk-btn[data-kind="act-a"].active { background: rgba(72,200,120,0.18); }
+.vk-btn[data-kind="act-b"].active { background: rgba(220,80,80,0.18); }
+.vk-btn[data-kind="act-x"].active { background: rgba(80,130,255,0.18); }
+.vk-btn[data-kind="act-y"].active { background: rgba(220,180,80,0.18); }
+
+.vk-btn[data-kind="dir"] { font-weight: 700; font-size: 22px; }
+
+.vk-btn[data-kind="menu"] {
+  min-width: 90px;
+  border-radius: 999px;  /* pill */
+}
+
+/* キー文字小ラベル (W / Up 等) */
+.vk-keytag {
+  position: absolute;
+  bottom: 2px; right: 4px;
+  font: 400 9px/1 ui-monospace, Consolas, monospace;
+  color: var(--fg-faint);
+  pointer-events: none;
+}
+.vk-btn[data-kind="dir"] .vk-keytag,
+.vk-btn[data-kind^="act-"] .vk-keytag {
+  bottom: -14px; right: 50%; transform: translateX(50%);
+}
+
+/* 縦が狭いとき (mobile portrait) は 2 段組みにせずスクロールに任せる */
+@media (max-width: 540px) {
+  .vk-pad { grid-template-columns: 1fr 1fr; }
+  .vk-zone-shoulder { grid-column: 1 / -1; }
+  .vk-zone-dpad     { grid-column: 1; grid-row: 2; }
+  .vk-zone-actions  { grid-column: 2; grid-row: 2; }
+  .vk-zone-menu     { grid-column: 1 / -1; grid-row: 3; flex-direction: row; }
+  .vk-zone-stick    { grid-column: 1 / -1; grid-row: 4; }
+  .vk-zone-extras   { grid-column: 1 / -1; grid-row: 5; }
+}
+
+/* vk-grid の既存 auto-fill grid は新ゲームパッドレイアウトと衝突するので、
+ * vk-pad を内包しているときだけ block にして全体を vk-pad に任せる。 */
+.vk-grid:has(.vk-pad) {
+  display: block;
+  padding: 0;
+}
