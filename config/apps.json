@@ -150,6 +150,182 @@
         "allowKeyboard": false,
         "allowMouse": false
       }
+    },
+
+    {
+      "id": "PrivateGame-cpp",
+      "name": "PrivateGame (C++ Port / Pictor)",
+      "description": "Unity 版を Pictor + Ergo に移植した C++ 実装。 ergo_custos が 127.0.0.1:5198 で /screenshot + /key を受ける。",
+      "target": "desktop",
+
+      "build": {
+        "workingDir": "E:/Document/Ars/PrivateGame",
+        "cmd":  "cmake",
+        "args": ["--build", "build", "--config", "Release", "--target", "PrivateGame"],
+        "timeoutSec": 600
+      },
+      "run": {
+        "workingDir": "E:/Document/Ars/PrivateGame/build/Release",
+        "cmd":  "PrivateGame.exe"
+      },
+
+      "ergoCustos": {
+        "host": "127.0.0.1",
+        "port": 5198
+      },
+      "capture": {
+        "type": "window",
+        "windowTitle": "PrivateGame",
+        "fps": 30,
+        "preset": "veryfast"
+      },
+      "input": {
+        "buttons": [
+          { "label": "↑ W",     "key": "W" },
+          { "label": "↓ S",     "key": "S" },
+          { "label": "← A",     "key": "A" },
+          { "label": "→ D",     "key": "D" },
+          { "label": "Attack J","key": "J" },
+          { "label": "B  K",    "key": "K" },
+          { "label": "X  U",    "key": "U" },
+          { "label": "Y  I",    "key": "I" },
+          { "label": "L  Q",    "key": "Q" },
+          { "label": "R  E",    "key": "E" },
+          { "label": "Pause",   "key": "Escape" },
+          { "label": "Quit",    "action": "kill" }
+        ],
+        "allowKeyboard": true,
+        "allowMouse": true
+      },
+      "logs": { "stdout": true, "stderr": true, "files": [] }
+    },
+
+    {
+      "id": "PrivateGame",
+      "name": "PrivateGame (Standalone Win64)",
+      "description": "Vampire Survivors 系 Unity ゲーム。BuildCommand.Build で Standalone を吐いて C:/Build/<name>.exe を起動する。Editor の PlayMode を直接叩きたい場合は別 entry `PrivateGame-editor` を使う。",
+      "target": "desktop",
+
+      "build": {
+        "workingDir": "E:/Document/PrivateGame/KzSUnity",
+        "cmd":  "C:/Program Files/Unity/Editor/Unity.exe",
+        "args": [
+          "-batchmode", "-quit", "-nographics",
+          "-projectPath", "E:/Document/PrivateGame/KzSUnity",
+          "-executeMethod", "BuildCommand.Build",
+          "-platform", "Windows",
+          "-team", "Foundation",
+          "-devmode", "true",
+          "-logFile", "-"
+        ],
+        "timeoutSec": 1800
+      },
+      "run": {
+        "workingDir": "E:/Document/PrivateGame/KzSUnity/Build",
+        "cmd":  "PrivateGame.exe"
+      },
+      "test": {
+        "workingDir": "E:/Document/PrivateGame/KzSUnity",
+        "cmd":  "C:/Program Files/Unity/Editor/Unity.exe",
+        "args": [
+          "-batchmode", "-runTests",
+          "-projectPath", "E:/Document/PrivateGame/KzSUnity",
+          "-testPlatform", "EditMode",
+          "-logFile", "-",
+          "-testResults", "E:/Document/PrivateGame/test-results.xml"
+        ],
+        "timeoutSec": 1200
+      },
+
+      "capture": {
+        "type": "window",
+        "windowTitle": "PrivateGame",
+        "fps": 30,
+        "preset": "veryfast"
+      },
+      "input": {
+        "buttons": [
+          { "label": "↑ W",       "key": "W" },
+          { "label": "↓ S",       "key": "S" },
+          { "label": "← A",       "key": "A" },
+          { "label": "→ D",       "key": "D" },
+          { "label": "Jump",      "key": "Space" },
+          { "label": "Slide",     "key": "LeftShift" },
+          { "label": "Curve L",   "key": "Q" },
+          { "label": "Curve R",   "key": "E" },
+          { "label": "A Attack",  "key": "F" },
+          { "label": "B (1)",     "key": "Num1" },
+          { "label": "X (2)",     "key": "Num2" },
+          { "label": "Y (3)",     "key": "Num3" },
+          { "label": "L",         "key": "L" },
+          { "label": "R",         "key": "R" },
+          { "label": "Pause",     "key": "Escape" },
+          { "label": "Quit",      "action": "kill" }
+        ],
+        "allowKeyboard": true,
+        "allowMouse": true
+      },
+      "logs": { "stdout": true, "stderr": true, "files": [] }
+    },
+
+    {
+      "id": "PrivateGame-editor",
+      "name": "PrivateGame (Unity Editor PlayMode)",
+      "description": "起動済みの Unity Editor を駆動するモード。Build = /api/recompile + compile-status ポーリング、Run = /api/play-start + isPlaying ポーリングループ。キー/スクリーンショットは UnityErgoCustosBridge (port 8687) 経由で in-app inject + Game View 直 capture (ホスト nut-js / ffmpeg を bypass)。Editor 側 `ergo_custos_bridge.json` の `captureMode` で `camera` (デフォルト / Camera.Render の Game View 絵) / `window` (Win32 PrintWindow で Editor ウィンドウ丸ごと、Scene/Inspector 含む) / `auto` (camera 失敗時 window へ) を切替可。Custos kill 時は PowerShell の finally で /api/play-stop を試みるが、taskkill /F だと走らないので Editor 側で手動 Stop が必要なことがある。",
+      "target": "desktop",
+
+      "ergoCustos": {
+        "host": "127.0.0.1",
+        "port": 8687
+      },
+
+      "build": {
+        "workingDir": "E:/Document/PrivateGame/KzSUnity",
+        "cmd": "powershell.exe",
+        "args": [
+          "-NoProfile", "-NonInteractive", "-Command",
+          "$ErrorActionPreference='Stop'; Invoke-RestMethod -Method POST -Uri http://localhost:8686/api/recompile | Out-Null; do { Start-Sleep -Milliseconds 500; $s = Invoke-RestMethod http://localhost:8686/api/compile-status } while ($s.isCompiling); if ($s.hasErrors) { $s.errors | ConvertTo-Json -Depth 4; exit 1 } else { Write-Host 'Compile OK' }"
+        ],
+        "timeoutSec": 600
+      },
+      "run": {
+        "workingDir": "E:/Document/PrivateGame/KzSUnity",
+        "cmd": "powershell.exe",
+        "args": [
+          "-NoProfile", "-NonInteractive", "-Command",
+          "try { Invoke-RestMethod -Method POST -Uri http://localhost:8686/api/play-start | Out-Null; Write-Host 'PlayMode started'; while ($true) { Start-Sleep -Milliseconds 800; try { $s = Invoke-RestMethod http://localhost:8686/api/play-status; if (-not $s.isPlaying) { Write-Host 'PlayMode stopped'; break } } catch { Write-Host 'status poll failed — Editor closed?'; break } } } finally { try { Invoke-RestMethod -Method POST -Uri http://localhost:8686/api/play-stop | Out-Null } catch {} }"
+        ]
+      },
+
+      "capture": {
+        "type": "window",
+        "windowTitle": "PrivateGame",
+        "fps": 30,
+        "preset": "veryfast"
+      },
+      "input": {
+        "buttons": [
+          { "label": "↑ W",       "key": "W" },
+          { "label": "↓ S",       "key": "S" },
+          { "label": "← A",       "key": "A" },
+          { "label": "→ D",       "key": "D" },
+          { "label": "Jump",      "key": "Space" },
+          { "label": "Slide",     "key": "LShift" },
+          { "label": "Curve L",   "key": "Q" },
+          { "label": "Curve R",   "key": "E" },
+          { "label": "A Attack",  "key": "F" },
+          { "label": "B (1)",     "key": "Num1" },
+          { "label": "X (2)",     "key": "Num2" },
+          { "label": "Y (3)",     "key": "Num3" },
+          { "label": "L",         "key": "L" },
+          { "label": "R",         "key": "R" },
+          { "label": "Pause",     "key": "Escape" },
+          { "label": "Quit",      "action": "kill" }
+        ],
+        "allowKeyboard": true,
+        "allowMouse": true
+      },
+      "logs": { "stdout": true, "stderr": true, "files": [] }
     }
   ]
 }
