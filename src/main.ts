@@ -27,7 +27,9 @@ import { logger } from "./shared/logger.js";
 
 const BACKEND_PORT  = Number(process.env.CUSTOS_PORT          ?? 7676);
 const FRONTEND_PORT = Number(process.env.CUSTOS_FRONTEND_PORT ?? 4649);
-const HOST          = process.env.CUSTOS_HOST                  ?? "0.0.0.0";
+// 既定は loopback。Custos は app 起動 (任意コマンド実行) / キー・マウス注入 /
+// スクリーンショット取得ができるため、無認証で LAN へ晒すと第三者が全操作可能 (CWE-668)。
+const HOST          = process.env.CUSTOS_HOST                  ?? "127.0.0.1";
 
 let started = false;
 process.on("uncaughtException", (err: Error & { code?: string }) => {
@@ -74,6 +76,23 @@ async function main() {
     // 単一の app instance を 2 ポートで listen させる。
     const app = buildApp({ registry, runner, broker, prefs });
     const servers: HttpServer[] = [];
+
+    // 非 loopback に bind するなら認証必須。CERNERE_URL 未設定 (anonymous 許可) や
+    // CUSTOS_OPEN=1 の素通しのまま 0.0.0.0 等で待ち受けると、LAN の第三者が
+    // 任意コマンド実行・入力注入・画面取得を無認証で行える。fail-fast で拒否する。
+    const isLoopbackHost = HOST === "127.0.0.1" || HOST === "::1" || HOST === "localhost";
+    const authIsAnonymous =
+        process.env.CUSTOS_OPEN === "1" ||
+        (!process.env.CERNERE_URL && process.env.CUSTOS_AUTH_REQUIRED !== "1");
+    if (!isLoopbackHost && authIsAnonymous) {
+        logger.error(
+            { host: HOST },
+            "refusing to bind a non-loopback host without authentication — set CERNERE_URL " +
+            "(or CUSTOS_AUTH_REQUIRED=1), or keep CUSTOS_HOST on loopback. " +
+            "Custos can run commands / inject input / capture the screen.",
+        );
+        process.exit(1);
+    }
 
     const ports: { port: number; label: string }[] = [];
     if (FRONTEND_PORT > 0) ports.push({ port: FRONTEND_PORT, label: "frontend" });
