@@ -108,7 +108,7 @@ export function attachWebSocketBroker(
     });
 
     // ── screenshot streamer からの自動配信 ──
-    // capture / ergoCustos が設定された app に subscribe しているクライアント
+    // capture / inAppBridge が設定された app に subscribe しているクライアント
     // 全員に N 秒ごとの PNG を base64 で push。binary フレームを使わないのは
     // 既存の app.js が JSON only で実装されているのを壊さないため。
     deps.streamer.on("frame", (frame: ScreenshotFrame) => {
@@ -146,7 +146,7 @@ async function handleClient(
             session.appIds.add(msg.appId);
             const status = registry.getStatus(msg.appId);
             if (status) send(session.ws, { type: "hello", appId: msg.appId, status });
-            // capture / ergoCustos 持ちの app は自動 stream を開始 (refcount)。
+            // capture / inAppBridge 持ちの app は自動 stream を開始 (refcount)。
             streamer.acquire(cfg, session.id);
             return;
         }

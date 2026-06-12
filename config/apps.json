@@ -271,12 +271,14 @@
     {
       "id": "PrivateGame-editor",
       "name": "PrivateGame (Unity Editor PlayMode)",
-      "description": "起動済みの Unity Editor を駆動するモード。Build = /api/recompile + compile-status ポーリング、Run = /api/play-start + isPlaying ポーリングループ。キー/スクリーンショットは UnityErgoCustosBridge (port 8687) 経由で in-app inject + Game View 直 capture (ホスト nut-js / ffmpeg を bypass)。Editor 側 `ergo_custos_bridge.json` の `captureMode` で `camera` (デフォルト / Camera.Render の Game View 絵) / `window` (Win32 PrintWindow で Editor ウィンドウ丸ごと、Scene/Inspector 含む) / `auto` (camera 失敗時 window へ) を切替可。Custos kill 時は PowerShell の finally で /api/play-stop を試みるが、taskkill /F だと走らないので Editor 側で手動 Stop が必要なことがある。",
+      "description": "起動済みの Unity Editor を駆動するモード。Build = UnityCommandServer (port 8686) の /api/recompile + compile-status ポーリング、Run = /api/play-start + isPlaying ポーリングループ。キー入力・スクリーンショット・WebRTC 動画は com.ludiars.custos-bridge (port 17778) 経由: /key で InputSystem に直接注入、/screenshot で Game View スナップショット、/stream で Game View を毎フレーム AsyncGPUReadback して raw BGRA を Custos に流し ffmpeg→werift で WebRTC 配信する (ホスト nut-js / gdigrab を bypass)。導入は KzSUnity の Packages/manifest.json に local path 追加 → プロジェクトルートに custos_bridge.json (port 17778) → メニュー LUDIARS/Custos Bridge/Enabled。captureMode (camera/window/auto) は custos_bridge.json 側。Custos kill 時は PowerShell の finally で /api/play-stop を試みるが、taskkill /F だと走らないので Editor 側で手動 Stop が必要なことがある。",
       "target": "desktop",
 
-      "ergoCustos": {
+      "inAppBridge": {
+        "kind": "unity",
         "host": "127.0.0.1",
-        "port": 8687
+        "port": 17778,
+        "fps": 24
       },
 
       "build": {

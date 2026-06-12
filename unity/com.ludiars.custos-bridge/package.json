@@ -1,0 +1,23 @@
+{
+  "name": "com.ludiars.custos-bridge",
+  "version": "0.1.0",
+  "displayName": "Custos Unity Bridge",
+  "description": "In-process HTTP bridge that exposes the ergo_custos protocol (/screenshot, /key, /health, /stream) inside the Unity Editor and Player, enabling Custos (remote test runner) to control Unity games without nut-js or window-capture.",
+  "unity": "6000.0",
+  "unityRelease": "0f1",
+  "author": {
+    "name": "LUDIARS",
+    "url": "https://ludiars.github.io/LUDIARS/"
+  },
+  "dependencies": {
+    "com.unity.inputsystem": "1.14.2"
+  },
+  "keywords": [
+    "custos",
+    "bridge",
+    "testing",
+    "remote",
+    "ludiars"
+  ],
+  "type": "library"
+}

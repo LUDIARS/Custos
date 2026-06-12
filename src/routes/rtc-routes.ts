@@ -29,9 +29,9 @@ export function createRtcRoutes({ registry, broker }: RtcRoutesDeps) {
     /// リアルタイム配信 (rtc/*) と独立しているのでどちらでも使える。
     ///
     /// 経路:
-    ///   1. `app.ergoCustos` が設定されていれば、アプリ内 ergo_custos
-    ///      ブリッジ (`/screenshot`) を叩く。低レイテンシ + window
-    ///      フォーカスや title マッチ無関係。
+    ///   1. `app.inAppBridge` が設定されていれば、アプリ内 HTTP ブリッジ
+    ///      (`/screenshot`) を叩く (ergo / Unity どちらも同一プロトコル)。
+    ///      低レイテンシ + window フォーカスや title マッチ無関係。
     ///   2. それ以外は `app.capture` を使ってホスト ffmpeg gdigrab/
     ///      x11grab/avfoundation で取る (legacy path)。
     r.post("/:id/screenshot", async (c) => {
@@ -41,13 +41,13 @@ export function createRtcRoutes({ registry, broker }: RtcRoutesDeps) {
 
         try {
             let png: Buffer;
-            if (cfg.ergoCustos) {
-                png = await fetchScreenshot(cfg.ergoCustos);
+            if (cfg.inAppBridge) {
+                png = await fetchScreenshot(cfg.inAppBridge);
             } else if (cfg.capture) {
                 const r = await captureScreenshot(cfg);
                 png = r.png;
             } else {
-                return c.json({ error: "app has neither ergoCustos nor capture config" }, 400);
+                return c.json({ error: "app has neither inAppBridge nor capture config" }, 400);
             }
             return new Response(png, {
                 status: 200,
@@ -68,7 +68,10 @@ export function createRtcRoutes({ registry, broker }: RtcRoutesDeps) {
         const id = c.req.param("id");
         const cfg = registry.getConfig(id);
         if (!cfg) return c.json({ error: "unknown app" }, 404);
-        if (!cfg.capture) return c.json({ error: "app has no capture config" }, 400);
+        // capture (gdigrab) か inAppBridge (bridge-stream) のどちらか一方が必要。
+        if (!cfg.capture && !cfg.inAppBridge) {
+            return c.json({ error: "app has neither capture nor inAppBridge config" }, 400);
+        }
 
         const body = await c.req.json<{ sdp?: string }>();
         if (!body.sdp) return c.json({ error: "sdp required" }, 400);

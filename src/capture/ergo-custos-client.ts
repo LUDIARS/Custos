@@ -1,17 +1,23 @@
 /**
- * アプリ内 ergo_custos モジュール (HTTP/1.0 ブリッジ) の client。
+ * アプリ内 HTTP ブリッジ汎用 client。
  *
- * 対象アプリが `ergo::custos::start({ port: 5198 })` を呼んでいると、
- * このクライアントが `/screenshot` (PNG) と `/key` (JSON) を直接叩いて
- * ホスト側 ffmpeg / nut-js を完全にバイパスできる。利点:
+ * ergo_custos (C++ / `ergo::custos::start`) と Unity アプリ内ブリッジの
+ * 両方が同一プロトコルを喋る前提で実装されており、kind に関係なく同じ
+ * 関数で通信できる。
+ *
+ * protocol:
+ *   GET  /screenshot → PNG バイナリ
+ *   POST /key        → body `{ code: int, down: bool }` (HID usage コード)
+ *
+ * 利点:
  *   - window title マッチや focus 取得の罠から解放
- *   - swapchain present 直後に in-app readback するので低レイテンシ
- *   - キー inject は ergo::input の inject API なので focus 関係なし
+ *   - swapchain present 直後の in-app readback で低レイテンシ
+ *   - キー inject は focus 非依存
  */
 
 import { childLogger } from "../shared/logger.js";
 
-const log = childLogger("ergo-custos");
+const log = childLogger("in-app-bridge");
 
 const SCREENSHOT_TIMEOUT_MS = 8_000;
 const KEY_TIMEOUT_MS        = 2_000;
@@ -30,12 +36,12 @@ export async function fetchScreenshot(ep: EndpointConfig): Promise<Buffer> {
         const res = await fetch(url, { signal: ctrl.signal });
         if (!res.ok) {
             const txt = await res.text().catch(() => "");
-            throw new Error(`ergo_custos /screenshot ${res.status}: ${txt.slice(0, 200)}`);
+            throw new Error(`in-app bridge /screenshot ${res.status}: ${txt.slice(0, 200)}`);
         }
         const buf = Buffer.from(await res.arrayBuffer());
         if (buf.length < 8 ||
             buf[0] !== 0x89 || buf[1] !== 0x50 || buf[2] !== 0x4E || buf[3] !== 0x47) {
-            throw new Error("ergo_custos /screenshot did not return a PNG");
+            throw new Error("in-app bridge /screenshot did not return a PNG");
         }
         return buf;
     } finally {
@@ -62,16 +68,17 @@ export async function sendKeyCode(
         });
         if (!res.ok && res.status !== 204) {
             const txt = await res.text().catch(() => "");
-            throw new Error(`ergo_custos /key ${res.status}: ${txt.slice(0, 200)}`);
+            throw new Error(`in-app bridge /key ${res.status}: ${txt.slice(0, 200)}`);
         }
-        log.debug({ code, down }, "ergo_custos key sent");
+        log.debug({ code, down }, "in-app bridge key sent");
     } finally {
         clearTimeout(t);
     }
 }
 
-/// キー名 (フロントエンドのバーチャルキー定義の `key` 文字列) を ergo の
-/// `KeyCode` (uint16_t、USB HID-like) にマップする。
+/// キー名 (フロントエンドのバーチャルキー定義の `key` 文字列) を HID usage 風
+/// `KeyCode` (uint16_t) にマップする。ergo / Unity どちらのブリッジも
+/// 同じコード体系を使う前提。
 ///
 /// 不明なキー名は undefined。
 export function keyNameToErgoCode(name: string): number | undefined {

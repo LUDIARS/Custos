@@ -76,19 +76,20 @@ export async function sendKey(app: AppConfig, key: string, down: boolean): Promi
         return;
     }
 
-    // ergo_custos が設定されていれば、ホスト nut-js 経由ではなくアプリ内
+    // inAppBridge が設定されていれば、ホスト nut-js 経由ではなくアプリ内
     // ブリッジに直接 inject する (focus 不要、低レイテンシ)。
-    if (app.ergoCustos) {
+    // ergo / Unity どちらも同じプロトコル (HID usage コード) を使う。
+    if (app.inAppBridge) {
         const code = keyNameToErgoCode(key);
         if (code === undefined) {
-            log.warn({ key }, "unknown key name — not in ergo KeyCode table");
+            log.warn({ key }, "unknown key name — not in HID KeyCode table");
             return;
         }
         try {
-            await sendKeyCode(app.ergoCustos, code, down);
+            await sendKeyCode(app.inAppBridge, code, down);
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
-            log.warn({ appId: app.id, key, down, msg }, "ergo_custos key send failed");
+            log.warn({ appId: app.id, key, down, msg }, "in-app bridge key send failed");
         }
         return;
     }

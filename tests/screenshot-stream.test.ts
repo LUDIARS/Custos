@@ -28,10 +28,23 @@ function appWithErgo(intervalSec = 0.05): AppConfig {
         name:  "Demo",
         target: "desktop",
         run:    { workingDir: ".", cwd: ".", cmd: "x", args: [], env: {} },
-        ergoCustos: { host: "127.0.0.1", port: 5198 },
-        capture:    { type: "window", fps: 30, preset: "veryfast", intervalSec },
-        input:      { buttons: [], allowKeyboard: true, allowMouse: false },
-        logs:       { stdout: true, stderr: true, files: [] },
+        inAppBridge: { kind: "ergo", host: "127.0.0.1", port: 5198 },
+        capture:     { type: "window", fps: 30, preset: "veryfast", intervalSec },
+        input:       { buttons: [], allowKeyboard: true, allowMouse: false },
+        logs:        { stdout: true, stderr: true, files: [] },
+    };
+}
+
+function appWithUnity(intervalSec = 0.05): AppConfig {
+    return {
+        id:    "demo-unity",
+        name:  "Demo Unity",
+        target: "desktop",
+        run:    { workingDir: ".", cwd: ".", cmd: "x", args: [], env: {} },
+        inAppBridge: { kind: "unity", host: "127.0.0.1", port: 5199 },
+        capture:     { type: "window", fps: 30, preset: "veryfast", intervalSec },
+        input:       { buttons: [], allowKeyboard: true, allowMouse: false },
+        logs:        { stdout: true, stderr: true, files: [] },
     };
 }
 
@@ -73,7 +86,7 @@ describe("ScreenshotStreamer", () => {
         s.shutdown();
     });
 
-    test("ergoCustos path: emits frame then second frame after interval", async () => {
+    test("inAppBridge (ergo) path: emits frame then second frame after interval", async () => {
         vi.mocked(fetchScreenshot).mockResolvedValue(PNG);
         const reg = new FakeRegistry() as any;
         const s = new ScreenshotStreamer(reg);
@@ -157,5 +170,27 @@ describe("ScreenshotStreamer", () => {
         s.acquire(appWithErgo(99 /* ignored */), "k1");
         expect(s.snapshot()).toEqual([{ appId: "demo", subscribers: 1, intervalSec: 0.05 }]);
         s.shutdown();
+    });
+
+    test("inAppBridge (unity) path: uses fetchScreenshot via same protocol", async () => {
+        vi.mocked(fetchScreenshot).mockResolvedValue(PNG);
+        const reg = new FakeRegistry() as any;
+        const s = new ScreenshotStreamer(reg);
+
+        const frames: ScreenshotFrame[] = [];
+        s.on("frame", (f: ScreenshotFrame) => frames.push(f));
+
+        s.acquire(appWithUnity(0.05), "session-unity");
+        await new Promise((r) => setTimeout(r, 200));
+        s.shutdown();
+
+        // Unity bridge uses the same fetchScreenshot code path
+        expect(frames.length).toBeGreaterThanOrEqual(2);
+        expect(frames[0]!.appId).toBe("demo-unity");
+        expect(frames[0]!.png.equals(PNG)).toBe(true);
+        // fetchScreenshot must have been called with the Unity endpoint (port 5199)
+        const calls = vi.mocked(fetchScreenshot).mock.calls;
+        expect(calls.length).toBeGreaterThanOrEqual(1);
+        expect(calls[0]![0]).toMatchObject({ kind: "unity", port: 5199 });
     });
 });

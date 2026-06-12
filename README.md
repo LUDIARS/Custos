@@ -2,8 +2,9 @@
 
 LUDIARS の **遠隔テストランナー**。事前設定したアプリをブラウザから
 build / run / kill し、ログとテスト結果を見ながらバーチャルキーで操作する。
-将来は WebRTC で画面ストリーミング、Cernere 認証、Android emulator 連携も
-入れる予定。
+画面は WebRTC でリアルタイムストリーミングする (ffmpeg gdigrab か、アプリ内
+ブリッジの `/stream` を入力源にできる)。将来は Cernere 認証、Android emulator
+連携も入れる予定。
 
 ## クイックスタート
 
@@ -37,9 +38,50 @@ npm run start
 - [x] Frontend: アプリ選択、Logs/Tests タブ、**広めのバーチャルキー領域**、
       オーバーレイ表示トグル
 - [x] Electron wrapper (npm run start)
-- [ ] **WebRTC 画面キャプチャ** (Phase 2、ffmpeg + werift)
+- [x] **WebRTC 画面ストリーミング** (ffmpeg + werift。動画源は `capture`
+      gdigrab か、`inAppBridge` の `/stream` の 2 系統)
+- [x] **アプリ内 HTTP ブリッジ** (`inAppBridge`、ergo_custos / Unity 互換。
+      `/screenshot` + `/key` + `/stream` を in-app readback + 入力注入で提供)
+- [x] **Unity ブリッジ** (`unity/com.ludiars.custos-bridge` UPM。Editor Game
+      View / Runtime Camera をフックし `/stream` で WebRTC 動画、`/key` で
+      InputSystem 注入。UnityRemote 型、port 17778)
 - [ ] **Cernere 認証** (Phase 2、`@ludiars/cernere-service-adapter`)
 - [ ] **Android emulator** (`target: "android"`、adb input keyevent)
+
+## アプリ内ブリッジ (`inAppBridge`) と Unity
+
+対象アプリが「アプリ内 HTTP ブリッジ」を持つ場合、ホスト側 ffmpeg gdigrab /
+nut-js を経由せず、アプリ内で直接 readback / 入力注入できる。プロトコルは
+ergo_custos と Unity ブリッジで共通:
+
+| Method | Path | 用途 |
+|--------|------|------|
+| GET  | `/screenshot`     | PNG スナップショット |
+| POST | `/key`            | `{code, down}` (code = USB HID usage) で入力注入 |
+| GET  | `/stream?fps=<F>` | raw BGRA8 連続フレーム (WebRTC 動画源) |
+
+`inAppBridge` を設定すると、`POST /api/apps/:id/rtc/offer` の WebRTC 動画源が
+gdigrab ではなくブリッジの `/stream` になる。`/stream` のレスポンスヘッダ
+(`X-Frame-Width/Height/Pixfmt/Fps`) から寸法を読み、`ffmpeg -f rawvideo
+-pix_fmt bgra -s WxH -r F -i pipe:0 → -f rtp` で H.264 化して werift に流す
+(KZS-Web の visus 経路と同型)。
+
+```jsonc
+"inAppBridge": {
+  "kind": "unity",     // "ergo" (既定, port 5198) | "unity" (port 17778)
+  "host": "127.0.0.1",
+  "port": 17778,
+  "fps":  24           // /stream の要求 fps (既定 24)
+}
+```
+
+旧 `ergoCustos: { host, port }` は後方互換で `inAppBridge {kind:"ergo"}` に
+正規化される。
+
+**Unity 対応** は `unity/com.ludiars.custos-bridge` (UPM パッケージ) を Unity
+プロジェクトに導入する。Editor Game View (UnityRemote 型、ビルド不要) と
+Runtime Camera (Player ビルド) の両方をフックでき、`/stream` で WebRTC、`/key`
+で新 Input System に注入する。詳細はパッケージ README と `spec/unity-bridge.md`。
 
 ## 設定スキーマ
 

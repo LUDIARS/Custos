@@ -1,0 +1,19 @@
+{
+    "name": "Ludiars.Custos.Bridge.Editor",
+    "rootNamespace": "Ludiars.Custos.Bridge.Editor",
+    "references": [
+        "Ludiars.Custos.Bridge.Runtime",
+        "Unity.InputSystem"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

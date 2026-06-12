@@ -19,7 +19,8 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { childLogger } from "../shared/logger.js";
-import type { AppConfig } from "../config/apps-config.js";
+import type { AppConfig, InAppBridgeConfig } from "../config/apps-config.js";
+import { connectBridgeStream, type BridgeStreamMeta } from "./bridge-stream.js";
 
 const log = childLogger("ffmpeg-capture");
 
@@ -176,8 +177,42 @@ export interface FfmpegStartOptions {
     payloadType?: number;
 }
 
+/**
+ * bridge-stream モード用 ffmpeg 引数 (入力 = stdin から rawvideo)。
+ *
+ * kzs-web の `buildVisusFfmpegArgs` と同形。入力側は
+ *   `-f rawvideo -pix_fmt <pixfmt> -s <W>x<H> -r <fps> -i pipe:0`
+ * で stdin を rawvideo として受け取り、encoderArgs で H.264 に圧縮して
+ * RTP に流す。`-re` は不要 (bridge 側が既に fps ペースで吐く)。
+ */
+export function buildBridgeStreamFfmpegArgs(
+    meta:         BridgeStreamMeta,
+    enc:          Encoder,
+    bitrateBps:   number,
+    rtpPort:      number,
+    rtpHost:      string,
+    payloadType:  number,
+): string[] {
+    const pt   = String(payloadType);
+    const encA = encoderArgs(enc, meta.fps, bitrateBps);
+    return [
+        "-loglevel", "warning",
+        "-f",         "rawvideo",
+        "-pix_fmt",   meta.pixfmt,
+        "-s",         `${meta.width}x${meta.height}`,
+        "-r",         String(meta.fps),
+        "-i",         "pipe:0",
+        "-an",
+        ...encA,
+        "-payload_type", pt,
+        "-f",     "rtp",
+        `rtp://${rtpHost}:${rtpPort}?pkt_size=1200`,
+    ];
+}
+
 export class FfmpegPipeline extends EventEmitter {
-    private proc: ChildProcess | null = null;
+    private proc:         ChildProcess | null = null;
+    private bridgeDestroy: (() => void) | null = null;
 
     /** ffmpeg 実行ファイルへのパス。env で上書き可、既定は PATH の `ffmpeg`。 */
     static binary(): string {
@@ -198,8 +233,85 @@ export class FfmpegPipeline extends EventEmitter {
             shell: false,
         });
 
+        this.attachProcListeners();
+    }
+
+    /**
+     * bridge-stream モードで ffmpeg を起動する。
+     *
+     * 1. bridge の `GET /stream` に接続してレスポンスヘッダからメタを読む
+     * 2. rawvideo stdin モードで ffmpeg を spawn
+     * 3. bridge レスポンス body を ffmpeg.stdin にパイプ
+     *
+     * 接続失敗 / ヘッダ不正は reject される。ffmpeg または bridge いずれかが
+     * 死んだら `"exit"` イベントを emit して caller (webrtc-broker) が
+     * closeSession を呼ぶ。
+     */
+    async startBridgeStream(
+        bridge: InAppBridgeConfig,
+        opts:   FfmpegStartOptions,
+    ): Promise<BridgeStreamMeta> {
+        if (this.proc) throw new Error("ffmpeg pipeline already running");
+
+        const rtpHost    = opts.rtpHost    ?? "127.0.0.1";
+        const pt         = opts.payloadType ?? 96;
+        const bitrateBps = Number(process.env.CUSTOS_VIDEO_BITRATE ?? 4_000_000);
+        const enc        = resolveEncoder();
+
+        // 1. bridge に接続してメタを取得
+        const result = await connectBridgeStream(bridge);
+        const { meta, stream, destroy } = result;
+        this.bridgeDestroy = destroy;
+
+        log.info(
+            { host: bridge.host, port: bridge.port, fps: bridge.fps, meta },
+            "bridge stream connected",
+        );
+
+        // 2. ffmpeg を rawvideo stdin モードで spawn
+        const args = buildBridgeStreamFfmpegArgs(meta, enc, bitrateBps, opts.rtpPort, rtpHost, pt);
+        log.info({ args }, "spawn ffmpeg (bridge-stream rawvideo stdin)");
+
+        this.proc = spawn(FfmpegPipeline.binary(), args, {
+            stdio: ["pipe", "ignore", "pipe"],
+            shell: false,
+        });
+
+        // 3. bridge stream body → ffmpeg stdin。EPIPE は握りつぶす (teardown 経路)。
+        this.proc.stdin?.on("error", () => { /* EPIPE: closeSession 経路で teardown */ });
+        if (this.proc.stdin) {
+            stream.pipe(this.proc.stdin);
+        }
+
+        // bridge stream が先に死んだら session teardown へ
+        stream.on("error", (err) => {
+            log.warn({ err: err instanceof Error ? err.message : String(err) },
+                      "bridge stream error — triggering session teardown");
+            this.emit("exit", null, null);
+        });
+        stream.on("end", () => {
+            log.info("bridge stream ended — triggering session teardown");
+            this.emit("exit", null, null);
+        });
+
+        this.attachProcListeners();
+        return meta;
+    }
+
+    stop(): void {
+        if (this.bridgeDestroy) {
+            try { this.bridgeDestroy(); } catch { /* ignore */ }
+            this.bridgeDestroy = null;
+        }
+        if (!this.proc) return;
+        try { this.proc.kill("SIGTERM"); } catch { /* ignore */ }
+        this.proc = null;
+    }
+
+    /** ffmpeg subprocess 共通のイベントリスナを付ける。 */
+    private attachProcListeners(): void {
         // ffmpeg は info ログを stderr に吐く。エラー検出用に warn 上げる。
-        this.proc.stderr?.on("data", (chunk: Buffer) => {
+        this.proc?.stderr?.on("data", (chunk: Buffer) => {
             const text = chunk.toString("utf8").trim();
             if (!text) return;
             if (/error|Error|failed|Could not/i.test(text)) {
@@ -210,21 +322,15 @@ export class FfmpegPipeline extends EventEmitter {
             }
         });
 
-        this.proc.on("error", (err) => {
+        this.proc?.on("error", (err) => {
             log.warn({ err }, "ffmpeg spawn error");
             this.emit("error", err);
         });
-        this.proc.on("exit", (code, signal) => {
+        this.proc?.on("exit", (code, signal) => {
             log.info({ code, signal }, "ffmpeg exited");
             this.emit("exit", code, signal);
             this.proc = null;
         });
-    }
-
-    stop(): void {
-        if (!this.proc) return;
-        try { this.proc.kill("SIGTERM"); } catch { /* ignore */ }
-        this.proc = null;
     }
 
     private buildArgs(app: AppConfig, opts: FfmpegStartOptions): string[] {

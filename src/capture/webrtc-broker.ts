@@ -127,9 +127,16 @@ export class WebRTCBroker extends EventEmitter {
     /**
      * offer を受け取って answer を返す。session id は内部で生成し、
      * client は次の close 呼び出しで使う。
+     *
+     * video source 選択:
+     *   - `app.inAppBridge` が設定されていれば bridge-stream source を使う。
+     *     bridge の `GET /stream` に接続して raw BGRA8 を ffmpeg stdin に流す。
+     *   - それ以外 (`app.capture` のみ) は従来の gdigrab/x11grab source。
      */
     async createSession(app: AppConfig, offerSdp: string): Promise<{ sessionId: string; answer: { sdp: string; type: string } }> {
-        if (!app.capture) throw new Error(`app ${app.id} has no capture config`);
+        if (!app.capture && !app.inAppBridge) {
+            throw new Error(`app ${app.id} has neither capture nor inAppBridge config`);
+        }
         const w = await getWerift();
         if (!w) throw new Error("werift not available");
 
@@ -252,6 +259,7 @@ export class WebRTCBroker extends EventEmitter {
         log.info({ sessionId, ...summary }, "answer SDP summary");
 
         // ── ffmpeg pipeline ─────────────────────────────────────
+        // source 選択: inAppBridge があれば bridge-stream、無ければ gdigrab(capture)。
         const pipeline = new FfmpegPipeline();
         pipeline.on("exit", () => this.closeSession(sessionId));
         pipeline.on("error", (err: Error) => log.warn({ err }, "ffmpeg pipeline error"));
@@ -264,7 +272,18 @@ export class WebRTCBroker extends EventEmitter {
         });
 
         try {
-            pipeline.start(app, { rtpPort });
+            if (app.inAppBridge) {
+                // bridge-stream source: HTTP 接続は非同期。
+                const meta = await pipeline.startBridgeStream(app.inAppBridge, { rtpPort });
+                log.info(
+                    { sessionId, appId: app.id, ...meta, rtpPort },
+                    "capture session opened (bridge-stream source)",
+                );
+            } else {
+                // gdigrab / x11grab / avfoundation source (従来経路)。
+                pipeline.start(app, { rtpPort });
+                log.info({ sessionId, appId: app.id, rtpPort }, "capture session opened (gdigrab source)");
+            }
         } catch (err) {
             try { udp.close(); } catch { /* ignore */ }
             try { pc.close(); }   catch { /* ignore */ }
@@ -280,8 +299,6 @@ export class WebRTCBroker extends EventEmitter {
         // 診断履歴に登録。
         diagHistory.push(diag);
         if (diagHistory.length > DIAG_HISTORY_MAX) diagHistory.shift();
-
-        log.info({ sessionId, appId: app.id, rtpPort }, "capture session opened");
 
         // 5 秒後に RTP がまだ届いていなければ警告 (ffmpeg / window 不在の typical)。
         setTimeout(() => {

@@ -90,18 +90,46 @@ const logsSchema = z.object({
     files: z.array(z.string()).default([]),
 });
 
-/// ergo_custos モジュール (アプリ内 HTTP ブリッジ) の接続先。
+/// ergo_custos モジュール接続先 (後方互換用 — 内部パース専用)。
 ///
-/// 設定すると Custos backend は screenshot / key inject を **アプリ内** の
-/// HTTP エンドポイントに直接喋るようになる。ホスト ffmpeg / nut-js は経由
-/// しないので window タイトル一致や focus 取得の問題から解放される。
-///
-/// 使用には対象アプリが ergo_custos を link して
-/// `ergo::custos::start({ port: 5198 })` を呼んでいる必要がある。
+/// 外部には公開しない。apps.json の旧形式 `ergoCustos: {host, port}` を
+/// 受理して `inAppBridge {kind:"ergo"}` に正規化するためだけに使う。
 const ergoCustosSchema = z.object({
     host: z.string().default("127.0.0.1"),
     port: z.number().int().min(1).max(65535).default(5198),
 });
+
+/// アプリ内 HTTP ブリッジの接続設定 (汎用)。
+///
+/// protocol は ergo / Unity どちらも同一:
+///   GET /screenshot         → PNG バイナリ
+///   GET /stream?fps=<F>     → raw BGRA8 連続バイト列 (動画ストリーム)
+///   POST /key               → body `{ code: int, down: bool }` (HID usage コード)
+///
+/// kind:
+///   "ergo"  — ergo_custos モジュール。既定ポート 5198。
+///             `ergo::custos::start({ port: 5198 })` が必要。
+///   "unity" — Unity アプリ内ブリッジ。既定ポート 17778。
+///             同プロトコルを実装した C# HTTP サーバが対象アプリ内で動く想定。
+///             ※ PORT-MAP 上 5170-5199 は Vite dev レンジで不適。
+///               Custos 17777 の隣 17778 を Unity ブリッジ既定に割り当て。
+///
+/// port を省略すると kind に応じた既定値が使われる。
+///
+/// fps — 動画ストリーム (`GET /stream`) 要求 fps。既定 24。
+///       snapshot (`GET /screenshot`) には影響しない。
+const inAppBridgeSchema = z.object({
+    kind: z.enum(["ergo", "unity"]).default("ergo"),
+    host: z.string().default("127.0.0.1"),
+    port: z.number().int().min(1).max(65535).optional(),
+    /** 動画ストリーム要求 fps (GET /stream?fps=<F>)。既定 24。 */
+    fps:  z.number().int().min(1).max(120).default(24),
+}).transform((v) => ({
+    kind: v.kind,
+    host: v.host,
+    port: v.port ?? (v.kind === "unity" ? 17778 : 5198),
+    fps:  v.fps,
+}));
 
 export const appConfigSchema = z.object({
     id:    z.string().regex(/^[a-z0-9][a-z0-9-]*$/i, "id は英数字 + ハイフン"),
@@ -114,10 +142,27 @@ export const appConfigSchema = z.object({
     run:     cmdSchema,
     test:    cmdSchema.optional(),
     capture: captureSchema.optional(),
-    /** 設定するとアプリ内の ergo_custos HTTP ブリッジが優先される。 */
-    ergoCustos: ergoCustosSchema.optional(),
+    /**
+     * @deprecated `inAppBridge` を使う。
+     * 後方互換のため受理し、`inAppBridge { kind: "ergo" }` に正規化する。
+     * `inAppBridge` が同時に指定された場合は `inAppBridge` が優先される。
+     */
+    ergoCustos:  ergoCustosSchema.optional(),
+    /** アプリ内 HTTP ブリッジ設定。設定すると screenshot / key inject をブリッジ経由で処理する。 */
+    inAppBridge: inAppBridgeSchema.optional(),
     input:   inputSchema.default({ buttons: [], allowKeyboard: true, allowMouse: false }),
     logs:    logsSchema.default({ stdout: true, stderr: true, files: [] }),
+}).transform((v) => {
+    // ergoCustos (deprecated alias) を inAppBridge {kind:"ergo"} に正規化する。
+    // inAppBridge が明示されていれば ergoCustos は無視 (inAppBridge 優先)。
+    const bridge = v.inAppBridge
+        ?? (v.ergoCustos
+            // fps は ergoCustos schema にないので inAppBridge の既定値 24 を補填する。
+            ? { kind: "ergo" as const, host: v.ergoCustos.host, port: v.ergoCustos.port, fps: 24 }
+            : undefined);
+    // ergoCustos を出力型から除去して正規化済み inAppBridge だけを残す。
+    const { ergoCustos: _dropped, ...rest } = v;
+    return { ...rest, inAppBridge: bridge };
 });
 
 export const appsRootSchema = z.object({
@@ -125,9 +170,10 @@ export const appsRootSchema = z.object({
     apps:    z.array(appConfigSchema),
 });
 
-export type AppConfig  = z.infer<typeof appConfigSchema>;
-export type CmdConfig  = z.infer<typeof cmdSchema>;
-export type AppsConfig = z.infer<typeof appsRootSchema>;
+export type AppConfig       = z.infer<typeof appConfigSchema>;
+export type CmdConfig       = z.infer<typeof cmdSchema>;
+export type AppsConfig      = z.infer<typeof appsRootSchema>;
+export type InAppBridgeConfig = z.infer<typeof inAppBridgeSchema>;
 
 // ─── Loader ─────────────────────────────────────────────────
 

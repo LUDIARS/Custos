@@ -12,7 +12,7 @@
  *   - capture 失敗 (アプリ未起動 / window 未発見など) は debug ログのみで
  *     timer は継続。アプリ起動後の自動再開を簡潔にするため。
  *   - 経路は POST /api/apps/:id/screenshot と同じ:
- *       1. cfg.ergoCustos が設定されていれば in-app HTTP bridge
+ *       1. cfg.inAppBridge が設定されていれば in-app HTTP bridge (ergo / Unity)
  *       2. それ以外は cfg.capture (ホスト ffmpeg)
  *     どちらも無いアプリは acquire しても何も起きない (debug ログ 1 回)。
  *
@@ -80,7 +80,7 @@ export class ScreenshotStreamer extends EventEmitter {
      * `key` は WS session id を渡す (release で同じ key を渡せば
      * 重複 acquire しても 1 件として清算される)。
      *
-     * 戻り値: ストリームが今アクティブか (capture/ergoCustos が無いと false)
+     * 戻り値: ストリームが今アクティブか (capture/inAppBridge が無いと false)
      */
     acquire(cfg: AppConfig, key: string): boolean {
         const intervalSec = effectiveIntervalSec(cfg, this.prefs);
@@ -88,8 +88,8 @@ export class ScreenshotStreamer extends EventEmitter {
             log.debug({ appId: cfg.id }, "auto-stream disabled (intervalSec <= 0)");
             return false;
         }
-        if (!cfg.capture && !cfg.ergoCustos) {
-            log.debug({ appId: cfg.id }, "no capture / ergoCustos config — auto-stream skipped");
+        if (!cfg.capture && !cfg.inAppBridge) {
+            log.debug({ appId: cfg.id }, "no capture / inAppBridge config — auto-stream skipped");
             return false;
         }
         let s = this.streams.get(cfg.id);
@@ -158,8 +158,8 @@ export class ScreenshotStreamer extends EventEmitter {
         if (!s || s.inflight) return;
         s.inflight = true;
         try {
-            let png = s.cfg.ergoCustos
-                ? await fetchScreenshot(s.cfg.ergoCustos)
+            let png = s.cfg.inAppBridge
+                ? await fetchScreenshot(s.cfg.inAppBridge)
                 : (await captureScreenshot(s.cfg)).png;
             // 設定タブの maxWidth でダウンスケール (毎フレーム参照なので runtime 反映)。
             const maxW = this.prefs?.get().maxWidth;

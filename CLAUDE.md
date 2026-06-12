@@ -45,10 +45,31 @@ MVP では `CUSTOS_OPEN=1` で素通し、未設定なら token=非空 のみチ
 
 WS メッセージ型を変更したら必ず両方 (TS と JS) を同コミットで更新する。
 
-## Phase 2 計画 (実装予定)
+## アプリ内ブリッジ (`inAppBridge`) と Unity
 
-1. **WebRTC capture** — `src/capture/ffmpeg-pipeline.ts` (gdigrab/x11grab/avfoundation)
-   と `src/capture/webrtc-broker.ts` (werift) を新設。POST /api/apps/:id/rtc/offer で SDP 交換。
+`inAppBridge` 設定があると、screenshot / key inject / WebRTC 動画源を **アプリ内
+HTTP ブリッジ** に向ける。プロトコルは ergo_custos と Unity ブリッジで共通
+(`GET /screenshot` PNG / `POST /key` {code,down} / `GET /stream?fps=<F>` raw BGRA)。
+
+- 設定の正規化: `inAppBridge {kind: "ergo"|"unity", host, port, fps}`。旧
+  `ergoCustos {host,port}` は `kind:"ergo"` に正規化 (後方互換、`apps-config.ts`)。
+  既定 port は ergo=5198 / unity=17778。
+- WebRTC 動画源の分岐 (`webrtc-broker.ts`): `inAppBridge` があれば
+  `FfmpegPipeline.startBridgeStream()` がブリッジの `/stream` に HTTP 接続し、
+  raw BGRA を `ffmpeg -f rawvideo … -i pipe:0 → -f rtp` に流す
+  (`src/capture/bridge-stream.ts`)。無ければ従来の gdigrab/x11grab。
+- Unity ブリッジ本体は `unity/com.ludiars.custos-bridge` (UPM パッケージ、C#)。
+  HID usage コードは `ergo-custos-client.ts` の `KEY_TABLE` /
+  `Runtime/Input/HidKeyMap.cs` / ergo `types.h` の 3 点を同期させる。
+- 設計の正本は `spec/unity-bridge.md`。
+
+## Phase 2 計画
+
+1. **WebRTC capture** — 実装済。`src/capture/ffmpeg-pipeline.ts`
+   (gdigrab/x11grab/avfoundation + bridge `/stream` rawvideo) と
+   `src/capture/webrtc-broker.ts` (werift)。POST /api/apps/:id/rtc/offer で SDP 交換。
+   codec 契約 (H.264 baseline / pt96 / packetization-mode=1 / MTU1200) は
+   KZS-Web (`tools/kzs-web/src/plugins/rtc`) と一致させる。
 2. **Cernere 認証** — `@ludiars/cernere-service-adapter` で WS / REST 両面に
    middleware を挟む。frontend に Composite ログイン画面を追加。
 3. **Android target** — `src/input/android.ts` に `adb shell input keyevent`
