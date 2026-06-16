@@ -328,6 +328,48 @@
         "allowMouse": true
       },
       "logs": { "stdout": true, "stderr": true, "files": [] }
+    },
+
+    {
+      "id": "suika-mr-native",
+      "name": "MR スイカゲーム (Native / Stage 4a)",
+      "description": "Ludellus スイカゲーム ネイティブ版。MR カメラ入力 (ArUco ボード + 手検出) + Pictor offscreen 描画 + ergo_custos 配信ブリッジ (port 5201)。--synthetic フラグで合成入力に切り替え可能。",
+      "target": "desktop",
+
+      "build": {
+        "workingDir": "E:/Document/Ars/Ludellus-Server",
+        "cmd": "cmake",
+        "args": [
+          "--build", "native/build", "--config", "Release",
+          "--target", "suika_mr_demo"
+        ],
+        "timeoutSec": 900
+      },
+      "run": {
+        "workingDir": "E:/Document/Ars/Ludellus-Server/native/build/Release",
+        "cmd": "suika_mr_demo.exe",
+        "args": ["--synthetic", "--frames", "0", "--fps", "30"]
+      },
+
+      "inAppBridge": {
+        "kind": "ergo",
+        "host": "127.0.0.1",
+        "port": 5201,
+        "fps": 30
+      },
+
+      "input": {
+        "buttons": [
+          { "label": "← aim",  "key": "Left" },
+          { "label": "→ aim",  "key": "Right" },
+          { "label": "Drop",   "key": "Space" },
+          { "label": "Reset",  "key": "R" },
+          { "label": "Quit",   "action": "kill" }
+        ],
+        "allowKeyboard": true,
+        "allowMouse": false
+      },
+      "logs": { "stdout": true, "stderr": true, "files": [] }
     }
   ]
 }
