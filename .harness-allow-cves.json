@@ -1,0 +1,4 @@
+{
+  "GHSA-2p57-rm9w-gvfp": "2026-07-14: werift 0.23.0 が修正版のない ip 2.0.1 を宣言しているが、werift/werift-ice の配布コードに ip の import および脆弱な isPublic 呼び出しがなく到達不能。上流更新時に解除する。",
+  "GHSA-5v7r-6r5c-r473": "2026-07-14: 最新 nut-js 4.2.6 が修正版のない Jimp 0.22.12 を固定している。Custos は nut-js の keyboard/mouse APIだけを動的利用し、脆弱な file-type ASF parserへ非信頼入力を渡す経路がない。上流更新時に解除する。"
+}
