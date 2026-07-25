@@ -91,7 +91,8 @@ namespace Ludiars.Custos.Bridge
                     Debug.LogWarning("[CustosBridge] Input System not enabled — key injection skipped.");
                     result?.Invoke(false);
 #endif
-                });
+                },
+                null);
 
             _server.Start();
 

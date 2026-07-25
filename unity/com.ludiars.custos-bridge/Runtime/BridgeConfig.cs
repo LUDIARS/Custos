@@ -27,6 +27,9 @@ namespace Ludiars.Custos.Bridge
         public string CaptureMode    { get; private set; } = "auto";
         public int    MaxLongEdge    { get; private set; } = 1280;
         public bool   RunInBackground{ get; private set; } = true;
+        public int    ConcordiaPort  { get; private set; } = 11111;
+        public string SessionId      { get; private set; } = null;
+        public string AuthorLabel    { get; private set; } = "PrivateGame/Unity";
 
         // ── 設定ファイル DTO (JsonUtility 用) ────────────────
         [Serializable]
@@ -38,6 +41,15 @@ namespace Ludiars.Custos.Bridge
             public string captureMode    = "auto";
             public int    maxLongEdge    = 1280;
             public bool   runInBackground = true;
+            public int    concordiaPort = 11111;
+            public string authorLabel = "PrivateGame/Unity";
+            public SessionDto session;
+        }
+
+        [Serializable]
+        private class SessionDto
+        {
+            public string id = "";
         }
 
         /// <summary>
@@ -75,6 +87,9 @@ namespace Ludiars.Custos.Bridge
             cfg.CaptureMode     = string.IsNullOrEmpty(dto.captureMode) ? "auto" : dto.captureMode.Trim().ToLowerInvariant();
             cfg.MaxLongEdge     = dto.maxLongEdge;
             cfg.RunInBackground = dto.runInBackground;
+            cfg.ConcordiaPort   = dto.concordiaPort;
+            cfg.SessionId       = string.IsNullOrEmpty(dto.session?.id) ? null : dto.session.id;
+            cfg.AuthorLabel     = string.IsNullOrEmpty(dto.authorLabel) ? "PrivateGame/Unity" : dto.authorLabel;
 
             // 環境変数で上書き
             ApplyEnvOverrides(cfg);
@@ -82,6 +97,11 @@ namespace Ludiars.Custos.Bridge
             if (cfg.Port < 1 || cfg.Port > 65535)
             {
                 Debug.LogError($"[CustosBridge] Invalid port: {cfg.Port}");
+                return null;
+            }
+            if (cfg.ConcordiaPort < 1 || cfg.ConcordiaPort > 65535)
+            {
+                Debug.LogError($"[CustosBridge] Invalid Concordia port: {cfg.ConcordiaPort}");
                 return null;
             }
 
