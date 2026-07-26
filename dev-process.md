@@ -16,16 +16,13 @@ Custos は **単一 Hono アプリを 2 ポートで listen** する (`src/main.
 
 `CUSTOS_OPEN=1` で認証を素通しする (開発用)。
 
-## Custos managed processes
+## 起動コマンド
 
-```concordia.processes
-{
-  "processes": [
-    {
-      "name": "custos-server",
-      "command": "npm run serve",
-      "auto_start": false
-    }
-  ]
-}
+Excubitor の `dev-process-md` runtime は **bash / sh のコードブロックの
+最初の非コメント行**を起動コマンドとして採用する
+(`Excubitor/src/process/dev-process-md.ts`)。書式を変えると起動できなくなるので、
+このブロックは残すこと。
+
+```bash
+npm run serve
 ```
