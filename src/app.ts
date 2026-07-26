@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { createAppsRoutes }     from "./routes/apps-routes.js";
 import { createRtcRoutes }      from "./routes/rtc-routes.js";
 import { createSettingsRoutes } from "./routes/settings-routes.js";
+import { createUnityRoutes }    from "./routes/unity-routes.js";
 import { cernereAuthMiddleware } from "./auth/middleware.js";
 import type { AppsRegistry } from "./apps/registry.js";
 import type { AppsRunner }   from "./apps/runner.js";
@@ -70,6 +71,11 @@ export function buildApp({ registry, runner, broker, prefs }: AppDeps) {
     // /api/settings/* — runtime 上書き面 (設定タブ)。
     app.use("/api/settings/*", cernereAuthMiddleware());
     app.route("/api/settings", createSettingsRoutes({ prefs }));
+
+    // /api/unity/* — Unity ブリッジ (loopback:17778) への薄いプロキシ。
+    // ブリッジは loopback 固定なので、遠隔からはここを経由するしかない。
+    app.use("/api/unity/*", cernereAuthMiddleware());
+    app.route("/api/unity", createUnityRoutes({ listConfigs: () => registry.listConfigs() }));
 
     // 静的ファイル。tsx で動かすときも dist 経由のときも src/ の隣の public/ を見る。
     const publicRoot = resolve(__dirname, "..", "public");

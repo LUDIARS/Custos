@@ -1,375 +1,690 @@
 {
-  "version": 1,
-  "apps": [
-    {
-      "id": "adventurecube",
-      "name": "AdventureCube (Debug)",
-      "description": "AdventureCube の Debug ビルド。Vulkan + BPM ベースのアクション/リズム 3D ゲーム。",
-      "target": "desktop",
-
-      "build": {
-        "workingDir": "E:/Document/Ars/AdventureCube",
-        "cmd":  "cmake",
-        "args": ["--build", "build", "--config", "Debug"],
-        "timeoutSec": 900
-      },
-      "run": {
-        "workingDir": "E:/Document/Ars/AdventureCube/build/Debug",
-        "cmd":  "adventurecube.exe"
-      },
-      "test": {
-        "workingDir": "E:/Document/Ars/AdventureCube",
-        "cmd":  "ctest",
-        "args": ["-C", "Debug", "--output-on-failure"]
-      },
-
-      "ergoCustos": {
-        "host": "127.0.0.1",
-        "port": 5198
-      },
-      "capture": {
-        "type": "window",
-        "windowTitle": "AdventureCube",
-        "fps": 30,
-        "preset": "veryfast"
-      },
-      "input": {
-        "buttons": [
-          { "label": "Forward",  "key": "W" },
-          { "label": "Back",     "key": "S" },
-          { "label": "Left",     "key": "A" },
-          { "label": "Right",    "key": "D" },
-          { "label": "↑",        "key": "Up" },
-          { "label": "↓",        "key": "Down" },
-          { "label": "←",        "key": "Left" },
-          { "label": "→",        "key": "Right" },
-          { "label": "Jump",     "key": "Space" },
-          { "label": "Attack",   "key": "J" },
-          { "label": "Skill",    "key": "K" },
-          { "label": "Pause",    "key": "Escape" },
-          { "label": "Quit",     "action": "kill" }
-        ],
-        "allowKeyboard": true,
-        "allowMouse": true
-      },
-      "logs": { "stdout": true, "stderr": true, "files": [] }
-    },
-
-    {
-      "id": "pictor-ocean-demo",
-      "name": "Pictor Ocean Demo (Debug)",
-      "description": "Pictor の海面テッセレーション + Gerstner 波 demo。Vulkan ウィンドウ。shader を ../shaders で拾うため workingDir は build/Debug。",
-      "target": "desktop",
-
-      "build": {
-        "workingDir": "E:/Document/Ars/Pictor",
-        "cmd":  "cmake",
-        "args": ["--build", "build", "--config", "Debug", "--target", "pictor_ocean_demo"],
-        "timeoutSec": 900
-      },
-      "run": {
-        "workingDir": "E:/Document/Ars/Pictor/build/Debug",
-        "cmd":  "pictor_ocean_demo.exe"
-      },
-
-      "capture": {
-        "type": "window",
-        "windowTitle": "Pictor — Ocean Wave Demo (Tessellation)",
-        "fps": 30,
-        "preset": "veryfast"
-      },
-      "input": {
-        "buttons": [
-          { "label": "Forward",   "key": "W" },
-          { "label": "Back",      "key": "S" },
-          { "label": "Left",      "key": "A" },
-          { "label": "Right",     "key": "D" },
-          { "label": "Up (E)",    "key": "E" },
-          { "label": "Down (Q)",  "key": "Q" },
-          { "label": "↑",         "key": "Up" },
-          { "label": "↓",         "key": "Down" },
-          { "label": "←",         "key": "Left" },
-          { "label": "→",         "key": "Right" },
-          { "label": "Wireframe", "key": "Tab" },
-          { "label": "Pause",     "key": "Space" },
-          { "label": "Quit",      "action": "kill" }
-        ],
-        "allowKeyboard": true,
-        "allowMouse": true
-      },
-      "logs": { "stdout": true, "stderr": true, "files": [] }
-    },
-
-    {
-      "id": "desktop-capture",
-      "name": "Desktop Capture (WebRTC test)",
-      "description": "デスクトップ全体を WebRTC で配信する検証用 entry。特定アプリのウィンドウに依存しないので、capture パイプライン (ffmpeg gdigrab desktop → RTP → werift) の疎通確認に使える。build/run/test は無く capture 専用。",
-      "target": "desktop",
-
-      "run": {
-        "workingDir": ".",
-        "cmd": "cmd.exe",
-        "args": ["/c", "echo", "desktop-capture is a capture-only entry"]
-      },
-
-      "capture": {
-        "type": "fullscreen",
-        "fps": 15,
-        "preset": "veryfast"
-      },
-      "input": {
-        "buttons": [],
-        "allowKeyboard": false,
-        "allowMouse": false
-      },
-      "logs": { "stdout": true, "stderr": true, "files": [] }
-    },
-
-    {
-      "id": "pictor-mobile-demo",
-      "name": "Pictor Mobile Demo",
-      "description": "Pictor の mobile pipeline simulation (headless console)。",
-      "target": "desktop",
-
-      "build": {
-        "workingDir": "E:/Document/Ars/Pictor",
-        "cmd":  "cmake",
-        "args": ["--build", "build", "--config", "Debug", "--target", "pictor_mobile_demo"],
-        "timeoutSec": 600
-      },
-      "run": {
-        "workingDir": "E:/Document/Ars/Pictor/build/Debug",
-        "cmd":  "pictor_mobile_demo.exe",
-        "args": ["--profile=MobileLow", "--frames=120"]
-      },
-
-      "input": {
-        "buttons": [
-          { "label": "Quit", "action": "kill" }
-        ],
-        "allowKeyboard": false,
-        "allowMouse": false
-      }
-    },
-
-    {
-      "id": "PrivateGame-cpp",
-      "name": "PrivateGame (C++ Port / Pictor)",
-      "description": "Unity 版を Pictor + Ergo に移植した C++ 実装。 ergo_custos が 127.0.0.1:5198 で /screenshot + /key を受ける。",
-      "target": "desktop",
-
-      "build": {
-        "workingDir": "E:/Document/Ars/PrivateGame",
-        "cmd":  "cmake",
-        "args": ["--build", "build", "--config", "Release", "--target", "PrivateGame"],
-        "timeoutSec": 600
-      },
-      "run": {
-        "workingDir": "E:/Document/Ars/PrivateGame/build/Release",
-        "cmd":  "PrivateGame.exe"
-      },
-
-      "ergoCustos": {
-        "host": "127.0.0.1",
-        "port": 5198
-      },
-      "capture": {
-        "type": "window",
-        "windowTitle": "PrivateGame",
-        "fps": 30,
-        "preset": "veryfast"
-      },
-      "input": {
-        "buttons": [
-          { "label": "↑ W",     "key": "W" },
-          { "label": "↓ S",     "key": "S" },
-          { "label": "← A",     "key": "A" },
-          { "label": "→ D",     "key": "D" },
-          { "label": "Attack J","key": "J" },
-          { "label": "B  K",    "key": "K" },
-          { "label": "X  U",    "key": "U" },
-          { "label": "Y  I",    "key": "I" },
-          { "label": "L  Q",    "key": "Q" },
-          { "label": "R  E",    "key": "E" },
-          { "label": "Pause",   "key": "Escape" },
-          { "label": "Quit",    "action": "kill" }
-        ],
-        "allowKeyboard": true,
-        "allowMouse": true
-      },
-      "logs": { "stdout": true, "stderr": true, "files": [] }
-    },
-
-    {
-      "id": "PrivateGame",
-      "name": "PrivateGame (Standalone Win64)",
-      "description": "Vampire Survivors 系 Unity ゲーム。BuildCommand.Build で Standalone を吐いて C:/Build/<name>.exe を起動する。Editor の PlayMode を直接叩きたい場合は別 entry `PrivateGame-editor` を使う。",
-      "target": "desktop",
-
-      "build": {
-        "workingDir": "E:/Document/PrivateGame/KzSUnity",
-        "cmd":  "C:/Program Files/Unity/Editor/Unity.exe",
-        "args": [
-          "-batchmode", "-quit", "-nographics",
-          "-projectPath", "E:/Document/PrivateGame/KzSUnity",
-          "-executeMethod", "BuildCommand.Build",
-          "-platform", "Windows",
-          "-team", "Foundation",
-          "-devmode", "true",
-          "-logFile", "-"
-        ],
-        "timeoutSec": 1800
-      },
-      "run": {
-        "workingDir": "E:/Document/PrivateGame/KzSUnity/Build",
-        "cmd":  "PrivateGame.exe"
-      },
-      "test": {
-        "workingDir": "E:/Document/PrivateGame/KzSUnity",
-        "cmd":  "C:/Program Files/Unity/Editor/Unity.exe",
-        "args": [
-          "-batchmode", "-runTests",
-          "-projectPath", "E:/Document/PrivateGame/KzSUnity",
-          "-testPlatform", "EditMode",
-          "-logFile", "-",
-          "-testResults", "E:/Document/PrivateGame/test-results.xml"
-        ],
-        "timeoutSec": 1200
-      },
-
-      "capture": {
-        "type": "window",
-        "windowTitle": "PrivateGame",
-        "fps": 30,
-        "preset": "veryfast"
-      },
-      "input": {
-        "buttons": [
-          { "label": "↑ W",       "key": "W" },
-          { "label": "↓ S",       "key": "S" },
-          { "label": "← A",       "key": "A" },
-          { "label": "→ D",       "key": "D" },
-          { "label": "Jump",      "key": "Space" },
-          { "label": "Slide",     "key": "LeftShift" },
-          { "label": "Curve L",   "key": "Q" },
-          { "label": "Curve R",   "key": "E" },
-          { "label": "A Attack",  "key": "F" },
-          { "label": "B (1)",     "key": "Num1" },
-          { "label": "X (2)",     "key": "Num2" },
-          { "label": "Y (3)",     "key": "Num3" },
-          { "label": "L",         "key": "L" },
-          { "label": "R",         "key": "R" },
-          { "label": "Pause",     "key": "Escape" },
-          { "label": "Quit",      "action": "kill" }
-        ],
-        "allowKeyboard": true,
-        "allowMouse": true
-      },
-      "logs": { "stdout": true, "stderr": true, "files": [] }
-    },
-
-    {
-      "id": "PrivateGame-editor",
-      "name": "PrivateGame (Unity Editor PlayMode)",
-      "description": "起動済みの Unity Editor を駆動するモード。Build = UnityCommandServer (port 8686) の /api/recompile + compile-status ポーリング、Run = /api/play-start + isPlaying ポーリングループ。キー入力・スクリーンショット・WebRTC 動画は com.ludiars.custos-bridge (port 17778) 経由: /key で InputSystem に直接注入、/screenshot で Game View スナップショット、/stream で Game View を毎フレーム AsyncGPUReadback して raw BGRA を Custos に流し ffmpeg→werift で WebRTC 配信する (ホスト nut-js / gdigrab を bypass)。導入は KzSUnity の Packages/manifest.json に local path 追加 → プロジェクトルートに custos_bridge.json (port 17778) → メニュー LUDIARS/Custos Bridge/Enabled。captureMode (camera/window/auto) は custos_bridge.json 側。Custos kill 時は PowerShell の finally で /api/play-stop を試みるが、taskkill /F だと走らないので Editor 側で手動 Stop が必要なことがある。",
-      "target": "desktop",
-
-      "inAppBridge": {
-        "kind": "unity",
-        "host": "127.0.0.1",
-        "port": 17778,
-        "fps": 24
-      },
-
-      "build": {
-        "workingDir": "E:/Document/PrivateGame/KzSUnity",
-        "cmd": "powershell.exe",
-        "args": [
-          "-NoProfile", "-NonInteractive", "-Command",
-          "$ErrorActionPreference='Stop'; Invoke-RestMethod -Method POST -Uri http://localhost:8686/api/recompile | Out-Null; do { Start-Sleep -Milliseconds 500; $s = Invoke-RestMethod http://localhost:8686/api/compile-status } while ($s.isCompiling); if ($s.hasErrors) { $s.errors | ConvertTo-Json -Depth 4; exit 1 } else { Write-Host 'Compile OK' }"
-        ],
-        "timeoutSec": 600
-      },
-      "run": {
-        "workingDir": "E:/Document/PrivateGame/KzSUnity",
-        "cmd": "powershell.exe",
-        "args": [
-          "-NoProfile", "-NonInteractive", "-Command",
-          "try { Invoke-RestMethod -Method POST -Uri http://localhost:8686/api/play-start | Out-Null; Write-Host 'PlayMode started'; while ($true) { Start-Sleep -Milliseconds 800; try { $s = Invoke-RestMethod http://localhost:8686/api/play-status; if (-not $s.isPlaying) { Write-Host 'PlayMode stopped'; break } } catch { Write-Host 'status poll failed — Editor closed?'; break } } } finally { try { Invoke-RestMethod -Method POST -Uri http://localhost:8686/api/play-stop | Out-Null } catch {} }"
-        ]
-      },
-
-      "capture": {
-        "type": "window",
-        "windowTitle": "PrivateGame",
-        "fps": 30,
-        "preset": "veryfast"
-      },
-      "input": {
-        "buttons": [
-          { "label": "↑ W",       "key": "W" },
-          { "label": "↓ S",       "key": "S" },
-          { "label": "← A",       "key": "A" },
-          { "label": "→ D",       "key": "D" },
-          { "label": "Jump",      "key": "Space" },
-          { "label": "Slide",     "key": "LShift" },
-          { "label": "Curve L",   "key": "Q" },
-          { "label": "Curve R",   "key": "E" },
-          { "label": "A Attack",  "key": "F" },
-          { "label": "B (1)",     "key": "Num1" },
-          { "label": "X (2)",     "key": "Num2" },
-          { "label": "Y (3)",     "key": "Num3" },
-          { "label": "L",         "key": "L" },
-          { "label": "R",         "key": "R" },
-          { "label": "Pause",     "key": "Escape" },
-          { "label": "Quit",      "action": "kill" }
-        ],
-        "allowKeyboard": true,
-        "allowMouse": true
-      },
-      "logs": { "stdout": true, "stderr": true, "files": [] }
-    },
-
-    {
-      "id": "suika-mr-native",
-      "name": "MR スイカゲーム (Native / Stage 4a)",
-      "description": "Ludellus スイカゲーム ネイティブ版。MR カメラ入力 (ArUco ボード + 手検出) + Pictor offscreen 描画 + ergo_custos 配信ブリッジ (port 5201)。--synthetic フラグで合成入力に切り替え可能。",
-      "target": "desktop",
-
-      "build": {
-        "workingDir": "E:/Document/Ars/Ludellus-Server",
-        "cmd": "cmake",
-        "args": [
-          "--build", "native/build", "--config", "Release",
-          "--target", "suika_mr_demo"
-        ],
-        "timeoutSec": 900
-      },
-      "run": {
-        "workingDir": "E:/Document/Ars/Ludellus-Server/native/build/Release",
-        "cmd": "suika_mr_demo.exe",
-        "args": ["--synthetic", "--frames", "0", "--fps", "30"]
-      },
-
-      "inAppBridge": {
-        "kind": "ergo",
-        "host": "127.0.0.1",
-        "port": 5201,
-        "fps": 30
-      },
-
-      "input": {
-        "buttons": [
-          { "label": "← aim",  "key": "Left" },
-          { "label": "→ aim",  "key": "Right" },
-          { "label": "Drop",   "key": "Space" },
-          { "label": "Reset",  "key": "R" },
-          { "label": "Quit",   "action": "kill" }
-        ],
-        "allowKeyboard": true,
-        "allowMouse": false
-      },
-      "logs": { "stdout": true, "stderr": true, "files": [] }
-    }
-  ]
+    "version": 1,
+    "apps": [
+        {
+            "id": "adventurecube",
+            "name": "AdventureCube (Debug)",
+            "description": "AdventureCube の Debug ビルド。Vulkan + BPM ベースのアクション/リズム 3D ゲーム。",
+            "target": "desktop",
+            "build": {
+                "workingDir": "E:/Document/Ars/AdventureCube",
+                "cmd": "cmake",
+                "args": [
+                    "--build",
+                    "build",
+                    "--config",
+                    "Debug"
+                ],
+                "timeoutSec": 900
+            },
+            "run": {
+                "workingDir": "E:/Document/Ars/AdventureCube/build/Debug",
+                "cmd": "adventurecube.exe"
+            },
+            "test": {
+                "workingDir": "E:/Document/Ars/AdventureCube",
+                "cmd": "ctest",
+                "args": [
+                    "-C",
+                    "Debug",
+                    "--output-on-failure"
+                ]
+            },
+            "ergoCustos": {
+                "host": "127.0.0.1",
+                "port": 5198
+            },
+            "capture": {
+                "type": "window",
+                "windowTitle": "AdventureCube",
+                "fps": 30,
+                "preset": "veryfast"
+            },
+            "input": {
+                "buttons": [
+                    {
+                        "label": "Forward",
+                        "key": "W"
+                    },
+                    {
+                        "label": "Back",
+                        "key": "S"
+                    },
+                    {
+                        "label": "Left",
+                        "key": "A"
+                    },
+                    {
+                        "label": "Right",
+                        "key": "D"
+                    },
+                    {
+                        "label": "↑",
+                        "key": "Up"
+                    },
+                    {
+                        "label": "↓",
+                        "key": "Down"
+                    },
+                    {
+                        "label": "←",
+                        "key": "Left"
+                    },
+                    {
+                        "label": "→",
+                        "key": "Right"
+                    },
+                    {
+                        "label": "Jump",
+                        "key": "Space"
+                    },
+                    {
+                        "label": "Attack",
+                        "key": "J"
+                    },
+                    {
+                        "label": "Skill",
+                        "key": "K"
+                    },
+                    {
+                        "label": "Pause",
+                        "key": "Escape"
+                    },
+                    {
+                        "label": "Quit",
+                        "action": "kill"
+                    }
+                ],
+                "allowKeyboard": true,
+                "allowMouse": true
+            },
+            "logs": {
+                "stdout": true,
+                "stderr": true,
+                "files": []
+            }
+        },
+        {
+            "id": "pictor-ocean-demo",
+            "name": "Pictor Ocean Demo (Debug)",
+            "description": "Pictor の海面テッセレーション + Gerstner 波 demo。Vulkan ウィンドウ。shader を ../shaders で拾うため workingDir は build/Debug。",
+            "target": "desktop",
+            "build": {
+                "workingDir": "E:/Document/Ars/Pictor",
+                "cmd": "cmake",
+                "args": [
+                    "--build",
+                    "build",
+                    "--config",
+                    "Debug",
+                    "--target",
+                    "pictor_ocean_demo"
+                ],
+                "timeoutSec": 900
+            },
+            "run": {
+                "workingDir": "E:/Document/Ars/Pictor/build/Debug",
+                "cmd": "pictor_ocean_demo.exe"
+            },
+            "capture": {
+                "type": "window",
+                "windowTitle": "Pictor — Ocean Wave Demo (Tessellation)",
+                "fps": 30,
+                "preset": "veryfast"
+            },
+            "input": {
+                "buttons": [
+                    {
+                        "label": "Forward",
+                        "key": "W"
+                    },
+                    {
+                        "label": "Back",
+                        "key": "S"
+                    },
+                    {
+                        "label": "Left",
+                        "key": "A"
+                    },
+                    {
+                        "label": "Right",
+                        "key": "D"
+                    },
+                    {
+                        "label": "Up (E)",
+                        "key": "E"
+                    },
+                    {
+                        "label": "Down (Q)",
+                        "key": "Q"
+                    },
+                    {
+                        "label": "↑",
+                        "key": "Up"
+                    },
+                    {
+                        "label": "↓",
+                        "key": "Down"
+                    },
+                    {
+                        "label": "←",
+                        "key": "Left"
+                    },
+                    {
+                        "label": "→",
+                        "key": "Right"
+                    },
+                    {
+                        "label": "Wireframe",
+                        "key": "Tab"
+                    },
+                    {
+                        "label": "Pause",
+                        "key": "Space"
+                    },
+                    {
+                        "label": "Quit",
+                        "action": "kill"
+                    }
+                ],
+                "allowKeyboard": true,
+                "allowMouse": true
+            },
+            "logs": {
+                "stdout": true,
+                "stderr": true,
+                "files": []
+            }
+        },
+        {
+            "id": "desktop-capture",
+            "name": "Desktop Capture (WebRTC test)",
+            "description": "デスクトップ全体を WebRTC で配信する検証用 entry。特定アプリのウィンドウに依存しないので、capture パイプライン (ffmpeg gdigrab desktop → RTP → werift) の疎通確認に使える。build/run/test は無く capture 専用。",
+            "target": "desktop",
+            "run": {
+                "workingDir": ".",
+                "cmd": "cmd.exe",
+                "args": [
+                    "/c",
+                    "echo",
+                    "desktop-capture is a capture-only entry"
+                ]
+            },
+            "capture": {
+                "type": "fullscreen",
+                "fps": 15,
+                "preset": "veryfast"
+            },
+            "input": {
+                "buttons": [],
+                "allowKeyboard": false,
+                "allowMouse": false
+            },
+            "logs": {
+                "stdout": true,
+                "stderr": true,
+                "files": []
+            }
+        },
+        {
+            "id": "pictor-mobile-demo",
+            "name": "Pictor Mobile Demo",
+            "description": "Pictor の mobile pipeline simulation (headless console)。",
+            "target": "desktop",
+            "build": {
+                "workingDir": "E:/Document/Ars/Pictor",
+                "cmd": "cmake",
+                "args": [
+                    "--build",
+                    "build",
+                    "--config",
+                    "Debug",
+                    "--target",
+                    "pictor_mobile_demo"
+                ],
+                "timeoutSec": 600
+            },
+            "run": {
+                "workingDir": "E:/Document/Ars/Pictor/build/Debug",
+                "cmd": "pictor_mobile_demo.exe",
+                "args": [
+                    "--profile=MobileLow",
+                    "--frames=120"
+                ]
+            },
+            "input": {
+                "buttons": [
+                    {
+                        "label": "Quit",
+                        "action": "kill"
+                    }
+                ],
+                "allowKeyboard": false,
+                "allowMouse": false
+            }
+        },
+        {
+            "id": "PrivateGame-cpp",
+            "name": "PrivateGame (C++ Port / Pictor)",
+            "description": "Unity 版を Pictor + Ergo に移植した C++ 実装。 ergo_custos が 127.0.0.1:5198 で /screenshot + /key を受ける。",
+            "target": "desktop",
+            "build": {
+                "workingDir": "E:/Document/Ars/PrivateGame",
+                "cmd": "cmake",
+                "args": [
+                    "--build",
+                    "build",
+                    "--config",
+                    "Release",
+                    "--target",
+                    "PrivateGame"
+                ],
+                "timeoutSec": 600
+            },
+            "run": {
+                "workingDir": "E:/Document/Ars/PrivateGame/build/Release",
+                "cmd": "PrivateGame.exe"
+            },
+            "ergoCustos": {
+                "host": "127.0.0.1",
+                "port": 5198
+            },
+            "capture": {
+                "type": "window",
+                "windowTitle": "PrivateGame",
+                "fps": 30,
+                "preset": "veryfast"
+            },
+            "input": {
+                "buttons": [
+                    {
+                        "label": "↑ W",
+                        "key": "W"
+                    },
+                    {
+                        "label": "↓ S",
+                        "key": "S"
+                    },
+                    {
+                        "label": "← A",
+                        "key": "A"
+                    },
+                    {
+                        "label": "→ D",
+                        "key": "D"
+                    },
+                    {
+                        "label": "Attack J",
+                        "key": "J"
+                    },
+                    {
+                        "label": "B  K",
+                        "key": "K"
+                    },
+                    {
+                        "label": "X  U",
+                        "key": "U"
+                    },
+                    {
+                        "label": "Y  I",
+                        "key": "I"
+                    },
+                    {
+                        "label": "L  Q",
+                        "key": "Q"
+                    },
+                    {
+                        "label": "R  E",
+                        "key": "E"
+                    },
+                    {
+                        "label": "Pause",
+                        "key": "Escape"
+                    },
+                    {
+                        "label": "Quit",
+                        "action": "kill"
+                    }
+                ],
+                "allowKeyboard": true,
+                "allowMouse": true
+            },
+            "logs": {
+                "stdout": true,
+                "stderr": true,
+                "files": []
+            }
+        },
+        {
+            "id": "PrivateGame",
+            "name": "PrivateGame (Standalone Win64)",
+            "description": "Vampire Survivors 系 Unity ゲーム。BuildCommand.Build で Standalone を吐いて C:/Build/<name>.exe を起動する。Editor の PlayMode を直接叩きたい場合は別 entry `PrivateGame-editor` を使う。",
+            "target": "desktop",
+            "build": {
+                "workingDir": "E:/Document/PrivateGame/KzSUnity",
+                "cmd": "C:/Program Files/Unity/Editor/Unity.exe",
+                "args": [
+                    "-batchmode",
+                    "-quit",
+                    "-nographics",
+                    "-projectPath",
+                    "E:/Document/PrivateGame/KzSUnity",
+                    "-executeMethod",
+                    "BuildCommand.Build",
+                    "-platform",
+                    "Windows",
+                    "-team",
+                    "Foundation",
+                    "-devmode",
+                    "true",
+                    "-logFile",
+                    "-"
+                ],
+                "timeoutSec": 1800
+            },
+            "run": {
+                "workingDir": "E:/Document/PrivateGame/KzSUnity/Build",
+                "cmd": "PrivateGame.exe"
+            },
+            "test": {
+                "workingDir": "E:/Document/PrivateGame/KzSUnity",
+                "cmd": "C:/Program Files/Unity/Editor/Unity.exe",
+                "args": [
+                    "-batchmode",
+                    "-runTests",
+                    "-projectPath",
+                    "E:/Document/PrivateGame/KzSUnity",
+                    "-testPlatform",
+                    "EditMode",
+                    "-logFile",
+                    "-",
+                    "-testResults",
+                    "E:/Document/PrivateGame/test-results.xml"
+                ],
+                "timeoutSec": 1200
+            },
+            "capture": {
+                "type": "window",
+                "windowTitle": "PrivateGame",
+                "fps": 30,
+                "preset": "veryfast"
+            },
+            "input": {
+                "buttons": [
+                    {
+                        "label": "↑ W",
+                        "key": "W"
+                    },
+                    {
+                        "label": "↓ S",
+                        "key": "S"
+                    },
+                    {
+                        "label": "← A",
+                        "key": "A"
+                    },
+                    {
+                        "label": "→ D",
+                        "key": "D"
+                    },
+                    {
+                        "label": "Jump",
+                        "key": "Space"
+                    },
+                    {
+                        "label": "Slide",
+                        "key": "LeftShift"
+                    },
+                    {
+                        "label": "Curve L",
+                        "key": "Q"
+                    },
+                    {
+                        "label": "Curve R",
+                        "key": "E"
+                    },
+                    {
+                        "label": "A Attack",
+                        "key": "F"
+                    },
+                    {
+                        "label": "B (1)",
+                        "key": "Num1"
+                    },
+                    {
+                        "label": "X (2)",
+                        "key": "Num2"
+                    },
+                    {
+                        "label": "Y (3)",
+                        "key": "Num3"
+                    },
+                    {
+                        "label": "L",
+                        "key": "L"
+                    },
+                    {
+                        "label": "R",
+                        "key": "R"
+                    },
+                    {
+                        "label": "Pause",
+                        "key": "Escape"
+                    },
+                    {
+                        "label": "Quit",
+                        "action": "kill"
+                    }
+                ],
+                "allowKeyboard": true,
+                "allowMouse": true
+            },
+            "logs": {
+                "stdout": true,
+                "stderr": true,
+                "files": []
+            }
+        },
+        {
+            "id": "PrivateGame-editor",
+            "name": "PrivateGame (Unity Editor PlayMode)",
+            "description": "起動済みの Unity Editor を駆動するモード。Build = UnityCommandServer (port 8686) の /api/recompile + compile-status ポーリング、Run = /api/play-start + isPlaying ポーリングループ。キー入力・スクリーンショット・WebRTC 動画は com.ludiars.custos-bridge (port 17778) 経由: /key で InputSystem に直接注入、/screenshot で Game View スナップショット、/stream で Game View を毎フレーム AsyncGPUReadback して raw BGRA を Custos に流し ffmpeg→werift で WebRTC 配信する (ホスト nut-js / gdigrab を bypass)。導入は KzSUnity の Packages/manifest.json に local path 追加 → プロジェクトルートに custos_bridge.json (port 17778) → メニュー LUDIARS/Custos Bridge/Enabled。captureMode (camera/window/auto) は custos_bridge.json 側。Custos kill 時は PowerShell の finally で /api/play-stop を試みるが、taskkill /F だと走らないので Editor 側で手動 Stop が必要なことがある。",
+            "target": "desktop",
+            "inAppBridge": {
+                "kind": "unity",
+                "host": "127.0.0.1",
+                "port": 17778,
+                "fps": 24
+            },
+            "build": {
+                "workingDir": "E:/Document/PrivateGame/KzSUnity",
+                "cmd": "powershell.exe",
+                "args": [
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    "$ErrorActionPreference='Stop'; Invoke-RestMethod -Method POST -Uri http://localhost:8686/api/recompile | Out-Null; do { Start-Sleep -Milliseconds 500; $s = Invoke-RestMethod http://localhost:8686/api/compile-status } while ($s.isCompiling); if ($s.hasErrors) { $s.errors | ConvertTo-Json -Depth 4; exit 1 } else { Write-Host 'Compile OK' }"
+                ],
+                "timeoutSec": 600
+            },
+            "run": {
+                "workingDir": "E:/Document/PrivateGame/KzSUnity",
+                "cmd": "powershell.exe",
+                "args": [
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    "try { Invoke-RestMethod -Method POST -Uri http://localhost:8686/api/play-start | Out-Null; Write-Host 'PlayMode started'; while ($true) { Start-Sleep -Milliseconds 800; try { $s = Invoke-RestMethod http://localhost:8686/api/play-status; if (-not $s.isPlaying) { Write-Host 'PlayMode stopped'; break } } catch { Write-Host 'status poll failed — Editor closed?'; break } } } finally { try { Invoke-RestMethod -Method POST -Uri http://localhost:8686/api/play-stop | Out-Null } catch {} }"
+                ]
+            },
+            "capture": {
+                "type": "window",
+                "windowTitle": "PrivateGame",
+                "fps": 30,
+                "preset": "veryfast"
+            },
+            "input": {
+                "buttons": [
+                    {
+                        "label": "↑ W",
+                        "key": "W"
+                    },
+                    {
+                        "label": "↓ S",
+                        "key": "S"
+                    },
+                    {
+                        "label": "← A",
+                        "key": "A"
+                    },
+                    {
+                        "label": "→ D",
+                        "key": "D"
+                    },
+                    {
+                        "label": "Jump",
+                        "key": "Space"
+                    },
+                    {
+                        "label": "Slide",
+                        "key": "LShift"
+                    },
+                    {
+                        "label": "Curve L",
+                        "key": "Q"
+                    },
+                    {
+                        "label": "Curve R",
+                        "key": "E"
+                    },
+                    {
+                        "label": "A Attack",
+                        "key": "F"
+                    },
+                    {
+                        "label": "B (1)",
+                        "key": "Num1"
+                    },
+                    {
+                        "label": "X (2)",
+                        "key": "Num2"
+                    },
+                    {
+                        "label": "Y (3)",
+                        "key": "Num3"
+                    },
+                    {
+                        "label": "L",
+                        "key": "L"
+                    },
+                    {
+                        "label": "R",
+                        "key": "R"
+                    },
+                    {
+                        "label": "Pause",
+                        "key": "Escape"
+                    },
+                    {
+                        "label": "Quit",
+                        "action": "kill"
+                    }
+                ],
+                "allowKeyboard": true,
+                "allowMouse": true
+            },
+            "logs": {
+                "stdout": true,
+                "stderr": true,
+                "files": []
+            }
+        },
+        {
+            "id": "suika-mr-native",
+            "name": "MR スイカゲーム (Native / Stage 4a)",
+            "description": "Ludellus スイカゲーム ネイティブ版。MR カメラ入力 (ArUco ボード + 手検出) + Pictor offscreen 描画 + ergo_custos 配信ブリッジ (port 5201)。--synthetic フラグで合成入力に切り替え可能。",
+            "target": "desktop",
+            "build": {
+                "workingDir": "E:/Document/Ars/Ludellus-Server",
+                "cmd": "cmake",
+                "args": [
+                    "--build",
+                    "native/build",
+                    "--config",
+                    "Release",
+                    "--target",
+                    "suika_mr_demo"
+                ],
+                "timeoutSec": 900
+            },
+            "run": {
+                "workingDir": "E:/Document/Ars/Ludellus-Server/native/build/Release",
+                "cmd": "suika_mr_demo.exe",
+                "args": [
+                    "--synthetic",
+                    "--frames",
+                    "0",
+                    "--fps",
+                    "30"
+                ]
+            },
+            "inAppBridge": {
+                "kind": "ergo",
+                "host": "127.0.0.1",
+                "port": 5201,
+                "fps": 30
+            },
+            "input": {
+                "buttons": [
+                    {
+                        "label": "← aim",
+                        "key": "Left"
+                    },
+                    {
+                        "label": "→ aim",
+                        "key": "Right"
+                    },
+                    {
+                        "label": "Drop",
+                        "key": "Space"
+                    },
+                    {
+                        "label": "Reset",
+                        "key": "R"
+                    },
+                    {
+                        "label": "Quit",
+                        "action": "kill"
+                    }
+                ],
+                "allowKeyboard": true,
+                "allowMouse": false
+            },
+            "logs": {
+                "stdout": true,
+                "stderr": true,
+                "files": []
+            }
+        },
+        {
+            "id": "PrivateGame-unity",
+            "name": "PrivateGame (Unity Editor)",
+            "target": "desktop",
+            "run": {
+                "workingDir": "E:/Document/Ars/PrivateGame",
+                "cmd": "cmd",
+                "args": [
+                    "/c",
+                    "echo",
+                    "Unity Editor is started by a human; Custos only attaches."
+                ]
+            },
+            "inAppBridge": {
+                "kind": "unity",
+                "host": "127.0.0.1",
+                "port": 17778,
+                "fps": 24
+            }
+        }
+    ]
 }
