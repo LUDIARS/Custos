@@ -55,7 +55,9 @@ export function createUnityPanel({ apiFetch, getAppId }) {
 
     function setApp(config) {
         state.appId = getAppId();
-        state.hasBridge = config?.inAppBridge?.kind === "unity";
+        // /api/apps は redact() を通した config を返すので inAppBridge そのものは来ない。
+        // backend が出す派生フラグを見る (hasBuild / hasTest と同じ流儀)。
+        state.hasBridge = config?.hasUnityBridge === true;
         state.nextSeq = 0;
         state.logs = [];
         state.hierarchy = [];
