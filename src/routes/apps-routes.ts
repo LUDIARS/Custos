@@ -91,7 +91,7 @@ export function createAppsRoutes({ registry, runner }: AppsRoutesDeps) {
 
 /** AppConfig のうち UI に出してよい情報だけを抜く (env / cwd の細部を表面に
  *  出すと運用上ノイズなので)。 */
-function redact(cfg: import("../config/apps-config.js").AppConfig) {
+export function redact(cfg: import("../config/apps-config.js").AppConfig) {
     return {
         id:          cfg.id,
         name:        cfg.name,
@@ -99,6 +99,10 @@ function redact(cfg: import("../config/apps-config.js").AppConfig) {
         target:      cfg.target,
         hasBuild:    Boolean(cfg.build),
         hasTest:     Boolean(cfg.test),
+        // Unity パネルの出し分けに使う。host / port は出さない — ブラウザは
+        // /api/unity/:appId/* 経由でしか触らないので接続先を知る必要がなく、
+        // 出せば loopback 前提の内部アドレスを表面に晒すだけになる。
+        hasUnityBridge: cfg.inAppBridge?.kind === "unity",
         capture:     cfg.capture
             ? { type: cfg.capture.type, fps: cfg.capture.fps }
             : null,

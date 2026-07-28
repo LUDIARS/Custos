@@ -31,6 +31,7 @@
     <button class="main-tab active" data-tab="view"  role="tab" aria-selected="true"  id="mainTabView">VIEW</button>
     <button class="main-tab"        data-tab="logs"  role="tab" aria-selected="false" id="mainTabLogs">LOG</button>
     <button class="main-tab"        data-tab="tests"    role="tab" aria-selected="false" id="mainTabTests">TEST</button>
+    <button class="main-tab"        data-tab="unity"    role="tab" aria-selected="false" id="mainTabUnity">UNITY</button>
     <button class="main-tab"        data-tab="settings" role="tab" aria-selected="false" id="mainTabSettings">SETTINGS</button>
     <span class="main-tabs-spacer"></span>
     <button id="btnClearOutput" class="ghost" type="button">Clear</button>
@@ -86,6 +87,44 @@
     <!-- ─── TEST タブ ────────────────────────────── -->
     <section class="main-panel" data-tab="tests" id="panelTests">
       <pre class="log-stream" id="testStream"></pre>
+    </section>
+
+    <section class="main-panel" data-tab="unity" id="panelUnity">
+      <div id="unityUnavailable" class="unity-unavailable">この app に Unity ブリッジの設定がありません。</div>
+      <div id="unityContent" class="unity-panel" hidden>
+        <header class="unity-header">
+          <span id="unityBridge" class="unity-bridge" data-state="down">reloading / offline</span>
+          <strong id="unityVersion">Unity</strong>
+          <span id="unityMode">Edit mode</span>
+          <span id="unityScene">No active scene</span>
+        </header>
+        <div class="unity-actions">
+          <button type="button" data-unity-action="play">▶ Play</button>
+          <button type="button" data-unity-action="stop">■ Stop</button>
+          <button type="button" data-unity-action="compile">⟳ Recompile</button>
+          <button type="button" data-unity-action="refresh">↻ Refresh</button>
+          <button type="button" data-unity-action="publish-capture">📷 Send to Session</button>
+          <span id="unityActionStatus" class="unity-action-status"></span>
+        </div>
+        <div class="unity-workspace">
+          <section class="unity-hierarchy-pane">
+            <h2>Hierarchy</h2>
+            <p id="unityHierarchyTruncated" class="unity-truncated" hidden>Hierarchy results were truncated.</p>
+            <div id="unityHierarchy" class="unity-hierarchy"></div>
+          </section>
+          <section class="unity-view-notice">映像と入力は既存の VIEW タブで操作します。</section>
+        </div>
+        <section class="unity-console-pane">
+          <div class="unity-console-toolbar">
+            <strong>Console</strong>
+            <button type="button" class="active" data-unity-log-filter="all">All</button>
+            <button type="button" data-unity-log-filter="error" id="unityErrorCount">Error 0</button>
+            <button type="button" data-unity-log-filter="warn" id="unityWarningCount">Warn 0</button>
+            <button type="button" data-unity-log-filter="log">Log</button>
+          </div>
+          <div id="unityConsole" class="unity-console" aria-live="polite"></div>
+        </section>
+      </div>
     </section>
 
     <!-- ─── SETTINGS タブ (runtime オーバーライド) ─── -->

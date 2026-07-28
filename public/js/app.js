@@ -11,6 +11,7 @@
  */
 
 import { connectWebRTC, closeWebRTC } from "/js/webrtc.js";
+import { createUnityPanel } from "/js/unity-panel.js";
 
 // **同 origin 運用**: backend と frontend は同じ Hono に乗っているので、
 // API も WS も相対 URL でよい。CORS / config.js 注入は不要。
@@ -98,6 +99,7 @@ const state = {
     boot:   { pending: false, appId: null },  // BOOT (build → run) チェイン状態
 };
 const CAPTURE_MODE_KEY = "custos.captureMode";
+const unityPanel = createUnityPanel({ apiFetch, getAppId: () => state.appId });
 
 // ─── boot ───────────────────────────────────────
 async function boot() {
@@ -136,6 +138,7 @@ function switchMainTab(tabId) {
     for (const t of mainTabs)   t.setAttribute("aria-selected", String(t.dataset.tab === tabId));
     for (const p of mainPanels) p.classList.toggle("active", p.dataset.tab === tabId);
     if (tabId === "settings") loadStreamPrefs().catch(() => {});
+    unityPanel.setActive(tabId === "unity");
 }
 
 // ─── settings tab ──────────────────────────────
@@ -278,6 +281,7 @@ async function onAppChange() {
     }
     state.appId = id || null;
     state.selectedConfig = state.apps.find((a) => a.config.id === id)?.config ?? null;
+    unityPanel.setApp(state.selectedConfig);
     renderVirtualKeys();
     updateActionButtons();
 
