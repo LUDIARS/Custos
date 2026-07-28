@@ -127,6 +127,7 @@ namespace Ludiars.Custos.Bridge.Editor
             // EditorGameViewFrameProvider (thin wrapper)
             var editorProvider = new EditorGameViewFrameProvider(
                 cfg.CaptureMode, cfg.MaxLongEdge, runtimeProvider, _streamer);
+            CustosCapturePublisher.Configure(editorProvider, cfg);
 
             _server = new BridgeServer(
                 editorProvider,
@@ -141,7 +142,8 @@ namespace Ludiars.Custos.Bridge.Editor
                     Debug.LogWarning("[CustosBridge] Input System not enabled — key injection skipped.");
                     result?.Invoke(false);
 #endif
-                });
+                },
+                CustosCapturePublisher.PublishAsync);
 
             _server.Start();
 
@@ -165,6 +167,7 @@ namespace Ludiars.Custos.Bridge.Editor
                 _hostGo = null;
             }
             _streamer = null;
+            CustosCapturePublisher.Reset();
         }
 
         // ── EditorApplication.update ポンプ ─────────────

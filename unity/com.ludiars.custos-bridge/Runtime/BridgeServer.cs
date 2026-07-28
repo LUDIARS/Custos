@@ -15,9 +15,11 @@ using System.IO;
 using System.Net;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using UnityEngine;
 using Ludiars.Custos.Bridge.Capture;
 using Ludiars.Custos.Bridge.Protocol;
+using Ludiars.Custos.Bridge.Sinks;
 
 namespace Ludiars.Custos.Bridge
 {
@@ -46,6 +48,7 @@ namespace Ludiars.Custos.Bridge
         // ── インジェクタコールバック ──────────────────────
         // BridgeServer は Input System に依存しない。key inject は callback で外に委譲。
         private readonly Action<int, bool, Action<bool>> _onKey;
+        private readonly Func<PublishCaptureRequest, Task<PublishCaptureResult>> _onPublishCapture;
 
         // ── コンストラクタ ───────────────────────────────
 
@@ -57,12 +60,14 @@ namespace Ludiars.Custos.Bridge
             IFrameProvider provider,
             FrameStreamer   streamer,
             BridgeConfig    config,
-            Action<int, bool, Action<bool>> onKey)
+            Action<int, bool, Action<bool>> onKey,
+            Func<PublishCaptureRequest, Task<PublishCaptureResult>> onPublishCapture)
         {
             _provider = provider;
             _streamer  = streamer;
             _config   = config;
             _onKey    = onKey;
+            _onPublishCapture = onPublishCapture;
         }
 
         // ── 公開 API ─────────────────────────────────────
@@ -169,6 +174,10 @@ namespace Ludiars.Custos.Bridge
                 case "/stream":
                     if (req.HttpMethod != "GET") { HttpJson.WriteJson(res, 405, "{\"error\":\"GET only\"}"); return; }
                     HandleStream(ctx);
+                    break;
+                case "/editor/publish-capture":
+                    if (req.HttpMethod != "POST") { HttpJson.WriteJson(res, 405, "{\"error\":\"POST only\"}"); return; }
+                    HandlePublishCapture(req, res);
                     break;
                 default:
                     HttpJson.WriteJson(res, 404, "{\"error\":\"unknown endpoint\"}");
@@ -281,6 +290,37 @@ namespace Ludiars.Custos.Bridge
         {
             // FrameStreamer がブロッキングで配信する
             _streamer.StartStream(ctx);
+        }
+
+        // P0 only. SceneView capture is explicitly deferred until the P2 provider exists.
+        private void HandlePublishCapture(HttpListenerRequest req, HttpListenerResponse res)
+        {
+            if (_onPublishCapture == null) { HttpJson.WriteJson(res, 503, "{\"error\":\"capture publisher unavailable\"}"); return; }
+            try
+            {
+                string body;
+                using (var reader = new StreamReader(req.InputStream, req.ContentEncoding ?? Encoding.UTF8)) body = reader.ReadToEnd();
+                var payload = JsonUtility.FromJson<PublishCaptureRequest>(body) ?? new PublishCaptureRequest();
+                var result = _onPublishCapture(payload).GetAwaiter().GetResult();
+                int status = result.StatusCode == 0 ? 503 : result.StatusCode;
+                string json = "{\"ok\":" + (result.Success ? "true" : "false") +
+                    ",\"error\":\"" + HttpJson.Escape(result.Error) + "\",\"png_path\":\"" + HttpJson.Escape(result.PngPath) + "\",\"candidates\":" + CandidatesJson(result) + "}";
+                HttpJson.WriteJson(res, status, json);
+            }
+            catch (Exception e) { HttpJson.WriteJson(res, 503, "{\"error\":\"" + HttpJson.Escape(e.Message) + "\"}"); }
+        }
+
+        private static string CandidatesJson(PublishCaptureResult result)
+        {
+            if (result.Candidates == null) return "[]";
+            var builder = new StringBuilder("[");
+            for (int index = 0; index < result.Candidates.Count; index++)
+            {
+                if (index > 0) builder.Append(',');
+                var candidate = result.Candidates[index];
+                builder.Append("{\"session_id\":\"").Append(HttpJson.Escape(candidate.session_id)).Append("\",\"label\":\"").Append(HttpJson.Escape(candidate.label)).Append("\"}");
+            }
+            return builder.Append(']').ToString();
         }
 
         // ── 内部型 ───────────────────────────────────────
