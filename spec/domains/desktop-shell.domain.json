@@ -1,0 +1,14 @@
+{
+  "name": "desktop-shell",
+  "description": "デスクトップの器 (Electron) とブラウザ側の画面。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "(^|/)electron/(?:.*/)?[^/]+$"
+    },
+    {
+      "pathPattern": "(^|/)public/(?:.*/)?[^/]+$"
+    }
+  ]
+}

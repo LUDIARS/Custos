@@ -1,0 +1,11 @@
+{
+  "name": "capture-evidence",
+  "description": "実行時の証跡。 画面・ログの取得と保管。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "(^|/)src/capture/(?:.*/)?[^/]+$"
+    }
+  ]
+}

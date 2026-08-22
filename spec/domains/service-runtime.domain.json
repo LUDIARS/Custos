@@ -1,0 +1,23 @@
+{
+  "name": "service-runtime",
+  "description": "プロセスとしての Custos。 起動、 CLI、 設定、 共有ユーティリティ、 テスト土台。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "(^|/)src/cli/(?:.*/)?[^/]+$"
+    },
+    {
+      "pathPattern": "(^|/)src/config/(?:.*/)?[^/]+$"
+    },
+    {
+      "pathPattern": "(^|/)src/shared/(?:.*/)?[^/]+$"
+    },
+    {
+      "pathPattern": "(^|/)tests/(?:.*/)?[^/]+$"
+    },
+    {
+      "pathPattern": "(^|/)src/[^/]+$"
+    }
+  ]
+}

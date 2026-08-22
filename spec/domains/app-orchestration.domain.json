@@ -1,0 +1,14 @@
+{
+  "name": "app-orchestration",
+  "description": "対象アプリの管理。 起動対象の登録と実行、 実行時状態の保持。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "(^|/)src/apps/(?:.*/)?[^/]+$"
+    },
+    {
+      "pathPattern": "(^|/)src/runtime/(?:.*/)?[^/]+$"
+    }
+  ]
+}

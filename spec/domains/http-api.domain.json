@@ -1,0 +1,14 @@
+{
+  "name": "http-api",
+  "description": "HTTP と WebSocket の受口。 ルート登録と常時接続の経路。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "(^|/)src/routes/(?:.*/)?[^/]+$"
+    },
+    {
+      "pathPattern": "(^|/)src/ws/(?:.*/)?[^/]+$"
+    }
+  ]
+}

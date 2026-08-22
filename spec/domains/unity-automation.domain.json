@@ -1,0 +1,17 @@
+{
+  "name": "unity-automation",
+  "description": "Unity 側の自動操作。 Unity プロジェクトへの接続、 実行と入力の送り込み、 ブリッジの維持。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    {
+      "pathPattern": "(^|/)src/unity/(?:.*/)?[^/]+$"
+    },
+    {
+      "pathPattern": "(^|/)src/input/(?:.*/)?[^/]+$"
+    },
+    {
+      "pathPattern": "(^|/)unity/(?:.*/)?[^/]+$"
+    }
+  ]
+}
