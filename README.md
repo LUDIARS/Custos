@@ -166,6 +166,16 @@ tests/
 | `CUSTOS_FFMPEG`          | "ffmpeg" | キャプチャ用 ffmpeg 実行ファイル |
 | `CUSTOS_ADB`             | "adb" | Android 入力用 adb 実行ファイル |
 
+## 自前の実機デバイスファーム（制御 API）
+
+Android / iOS 実機の登録設定、ホスト報告、永続化された期限付き排他リース、解放後の
+後片付け確認を `/api/farm` に追加できる。`CUSTOS_FARM_CONFIG` の明示設定時のみ有効。
+設定例は `config/farm.example.json`、導入・API・復旧契約は
+[device-farm 仕様](spec/feature/device-farm.md) を参照。
+
+この段階では端末ワーカー・テストジョブ・遠隔操作 UI は未接続。実機テストの実行には
+[後続タスク](spec/tasks/2026-09-11-self-hosted-device-farm.md) の実装が必要。
+
 ## ライセンス
 
 未定 (LUDIARS internal、private)。

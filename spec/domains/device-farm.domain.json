@@ -1,0 +1,9 @@
+{
+  "name": "device-farm",
+  "description": "所有する Android / iOS 実機プールの登録、排他確保、ホスト観測、後片付け待ち状態。",
+  "presetRules": [],
+  "templateRules": [],
+  "membership": [
+    { "pathPattern": "(^|/)src/farm/(?:.*/)?[^/]+$" }
+  ]
+}

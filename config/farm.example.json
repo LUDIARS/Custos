@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "heartbeatTimeoutSec": 60,
+  "hosts": [
+    { "id": "android-host", "tokenEnv": "CUSTOS_FARM_ANDROID_HOST_TOKEN" },
+    { "id": "ios-host", "tokenEnv": "CUSTOS_FARM_IOS_HOST_TOKEN" }
+  ],
+  "devices": [
+    { "id": "android-01", "hostId": "android-host", "platform": "android", "serial": "REPLACE_ANDROID_SERIAL", "model": "REPLACE_MODEL", "osVersion": "REPLACE_OS_VERSION", "tags": ["smoke"] },
+    { "id": "ios-01", "hostId": "ios-host", "platform": "ios", "serial": "REPLACE_IOS_UDID", "model": "REPLACE_MODEL", "osVersion": "REPLACE_OS_VERSION", "tags": ["smoke"] }
+  ]
+}

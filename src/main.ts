@@ -24,6 +24,7 @@ import { WebRTCBroker } from "./capture/webrtc-broker.js";
 import { ScreenshotStreamer } from "./capture/screenshot-stream.js";
 import { RuntimeStreamPrefs } from "./runtime/stream-prefs.js";
 import { logger } from "./shared/logger.js";
+import { loadFarmRuntime } from "./farm/runtime.js";
 
 const BACKEND_PORT  = Number(process.env.CUSTOS_PORT          ?? 7676);
 const FRONTEND_PORT = Number(process.env.CUSTOS_FRONTEND_PORT ?? 4649);
@@ -49,6 +50,7 @@ process.on("unhandledRejection", (reason) => {
 
 async function main() {
     const cfg = loadAppsConfig();
+    const farm = loadFarmRuntime();
     const authMode = process.env.CUSTOS_OPEN === "1"
         ? "open (CUSTOS_OPEN=1)"
         : process.env.CERNERE_URL
@@ -74,7 +76,7 @@ async function main() {
     });
 
     // 単一の app instance を 2 ポートで listen させる。
-    const app = buildApp({ registry, runner, broker, prefs });
+    const app = buildApp({ registry, runner, broker, prefs, farm });
     const servers: HttpServer[] = [];
 
     // 非 loopback に bind するなら認証必須。CERNERE_URL 未設定 (anonymous 許可) や

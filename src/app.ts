@@ -23,6 +23,8 @@ import type { AppsRunner }   from "./apps/runner.js";
 import type { WebRTCBroker } from "./capture/webrtc-broker.js";
 import type { RuntimeStreamPrefs } from "./runtime/stream-prefs.js";
 import { getResolvedEncoder } from "./capture/ffmpeg-pipeline.js";
+import { createFarmRoutes } from "./routes/farm-routes.js";
+import type { FarmRuntime } from "./farm/runtime.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -31,9 +33,10 @@ export interface AppDeps {
     runner:   AppsRunner;
     broker:   WebRTCBroker;
     prefs:    RuntimeStreamPrefs;
+    farm?: FarmRuntime | undefined;
 }
 
-export function buildApp({ registry, runner, broker, prefs }: AppDeps) {
+export function buildApp({ registry, runner, broker, prefs, farm }: AppDeps) {
     const app = new Hono();
 
     app.use("*", honoLogger());
@@ -76,6 +79,8 @@ export function buildApp({ registry, runner, broker, prefs }: AppDeps) {
     // ブリッジは loopback 固定なので、遠隔からはここを経由するしかない。
     app.use("/api/unity/*", cernereAuthMiddleware());
     app.route("/api/unity", createUnityRoutes({ listConfigs: () => registry.listConfigs() }));
+
+    if (farm) app.route("/api/farm", createFarmRoutes(farm));
 
     // 静的ファイル。tsx で動かすときも dist 経由のときも src/ の隣の public/ を見る。
     const publicRoot = resolve(__dirname, "..", "public");
