@@ -6,7 +6,7 @@ Custos 本体 (TS) は一切変更せずに Unity アプリ/Editor を遠隔操�
 
 - 作成日: 2026-06-12
 - ステータス: 設計のみ (実装は別担当)
-- ターゲット実証プロジェクト: `E:/Document/Ars/PrivateGame/KzSUnity`
+- ターゲット実証プロジェクト: `E:/Document/Ars/PrivateGame/GameUnity`
   (URP 17.0.4 / Unity 6 / com.unity.inputsystem 1.14.2 / activeInputHandler=2 (Both))
 
 ---
@@ -23,7 +23,7 @@ Custos 本体 (TS) は一切変更せずに Unity アプリ/Editor を遠隔操�
 - `code` は **USB HID usage 風 int** (`KEY_TABLE` 体系、§3.2)。ergo の `include/ergo/input/types.h` `enum class KeyCode` と一致。
 - client 側 timeout: screenshot 8s / key 2s (`ergo-custos-client.ts` 冒頭の定数)。bridge はこれより十分速く返すこと。
 - 追加 endpoint は protocol 互換を壊さない限り可。`GET /health` (`{"status":"ok","isPlaying":bool}`) を診断用に持つ
-  (KzSUnity 内の既存プロトタイプ `UnityErgoCustosBridge.cs` と同じ。Custos client は呼ばないので互換に影響しない)。
+  (GameUnity 内の既存プロトタイプ `UnityErgoCustosBridge.cs` と同じ。Custos client は呼ばないので互換に影響しない)。
 - エラー応答は `4xx/5xx + application/json {"error": "..."}`。
 
 **Custos 側に必要な変更はゼロ。** `config/apps.json` の app entry に
@@ -33,9 +33,9 @@ Custos 本体 (TS) は一切変更せずに Unity アプリ/Editor を遠隔操�
 
 ### 0.1 既存プロトタイプ (prior art / 置き換え対象)
 
-`KzSUnity/Assets/Scripts/Editor/Musa/UnityErgoCustosBridge.cs` (port 8687、`[InitializeOnLoad]`、
+`GameUnity/Assets/Scripts/Editor/Musa/UnityErgoCustosBridge.cs` (port 8687、`[InitializeOnLoad]`、
 HttpListener + EditorApplication.update ポンプ) が同 protocol で稼働実績あり。本設計はこれを
-**UPM パッケージとして製品化し、KzSUnity 側プロトタイプを置き換える** (二重 inject / port 重複を避けるため、
+**UPM パッケージとして製品化し、GameUnity 側プロトタイプを置き換える** (二重 inject / port 重複を避けるため、
 パッケージ導入時に Musa 版は削除する。Play/Stop 用 `UnityCommandServer` (8686) は対象外、そのまま残す)。
 プロトタイプから引き継ぐ実証済みパターン: HttpListener 同期 accept loop / key の ConcurrentQueue /
 screenshot の coalescing (`pendingShot` 共有 + `ManualResetEventSlim`) / `beforeAssemblyReload` での停止。
@@ -104,12 +104,12 @@ interface IFrameProvider {
 - **上下反転**: `AsyncGPUReadback` の行順は graphics API 依存。`SystemInfo.graphicsUVStartsAtTop`
   (D3D11/12/Metal で true) のとき CPU 側で行を逆順に詰め替えるか、事前に
   `Graphics.Blit(src, dst, new Vector2(1, -1), new Vector2(0, 1))` で反転 blit する。
-  **要検証**: D3D11 実機での実際の向き (KS は Windows / D3D 想定)。CPU 行逆順を既定実装とし、
+  **要検証**: D3D11 実機での実際の向き (PrivateGame は Windows / D3D 想定)。CPU 行逆順を既定実装とし、
   起動時 1 回の目視 (テスト画像) で確認する。
 - **sRGB**: Linear color space プロジェクトでは staging RT を
   `new RenderTexture(w, h, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB)`
   (または `GraphicsFormat.R8G8B8A8_SRGB`) で作る。Linear フォーマットのまま readback すると
-  PNG が暗く/白っぽくなる。**要検証**: KzSUnity の ColorSpace 設定 (Linear 想定)。
+  PNG が暗く/白っぽくなる。**要検証**: GameUnity の ColorSpace 設定 (Linear 想定)。
 - **解像度**: `Screen.width/height`。設定で長辺上限 (既定 1280) を持ち、超える場合は
   ダウンスケール blit を挟む — Custos の `screenshot-stream.ts` は fps ポーリングするため
   PNG サイズがそのまま帯域と encode 時間に効く。
@@ -125,7 +125,7 @@ interface IFrameProvider {
 - `RenderPipelineManager.endCameraRendering` で base camera の出力を blit — overlay UI が映らない。
   URP の `endFrameRendering` は obsolete (→ `endContextRendering`) であり、いずれにせよ UI 欠落問題が残る。
 - 専用ミラーカメラ + `targetTexture` — カメラ複製の維持コスト (cull mask / stack / post 設定追従) が高く、
-  KzSUnity は camera stack 未使用 (シーン上 `m_Cameras: []` 確認済) なので利点がない。
+  GameUnity は camera stack 未使用 (シーン上 `m_Cameras: []` 確認済) なので利点がない。
 
 ### 2.2 (B) Editor Game View 版 — `EditorGameViewFrameProvider`
 
@@ -156,11 +156,11 @@ PlayMode では provider (A) へ委譲、緊急時 `PrintWindow`」という **�
 
 ## 3. 入力注入 (最重要)
 
-### 3.1 KzSUnity の入力読み出し実態 (調査結果)
+### 3.1 GameUnity の入力読み出し実態 (調査結果)
 
 | 経路 | 使用箇所 | bridge からの到達性 |
 |------|---------|------------------|
-| **新 Input System / InputActionAsset** (`Assets/Settings/PlayerInputActions.inputactions`、`<Keyboard>/...` binding 多数: w/a/s/d, space, 1-3, arrows, enter, escape, q/e/l/r/g/f, numpad1-6, j/k/u/i/o, shift, pause) | ゲームプレイ本線。`PlayerController.cs` が `InputActionAsset.FindActionMap("KuzuPlayer")` で取得 (`PlayerInput` コンポーネントは不使用、生成 wrapper `@PlayerInputActions` も実行時未使用) | ◎ `QueueStateEvent` で到達 |
+| **新 Input System / InputActionAsset** (`Assets/Settings/PlayerInputActions.inputactions`、`<Keyboard>/...` binding 多数: w/a/s/d, space, 1-3, arrows, enter, escape, q/e/l/r/g/f, numpad1-6, j/k/u/i/o, shift, pause) | ゲームプレイ本線。`PlayerController.cs` が `InputActionAsset.FindActionMap("GamePlayer")` で取得 (`PlayerInput` コンポーネントは不使用、生成 wrapper `@PlayerInputActions` も実行時未使用) | ◎ `QueueStateEvent` で到達 |
 | **`Keyboard.current` 直読み** | `PlayerController.TryKeyboardFallback()` (digit1-3 等) | ◎ 同上 (仮想デバイスが `.current` になる、§3.3) |
 | **legacy `Input.*`** | 3 箇所のみ: `Outgame/Option/LRButtonBase.cs` (`Input.GetAxisRaw("Horizontal")`)、`System/Debug/GCAllocTestSpawner.cs` (マウス、debug)、`System/ErrorReport/ErrorReporterUpdater.cs` (`Input.GetKeyDown(KeyCode.Space)`、`#if UNITY_EDITOR \|\| DEVELOPMENT_BUILD` 限定) | ✗ 新 Input System への注入は届かない → §3.4 |
 
@@ -255,13 +255,13 @@ InputSystem.RemoveDevice(virtualKeyboard);
 
 | 案 | 内容 | 評価 |
 |----|------|------|
-| **(a) ゲーム側を新 system 読みに寄せる (採用)** | KzSUnity の legacy 読み出しは 3 箇所のみ (§3.1)。`ErrorReporterUpdater` → `Keyboard.current.spaceKey.wasPressedThisFrame`、`LRButtonBase.GetAxisRaw("Horizontal")` → `Keyboard.current.leftArrowKey/rightArrowKey` (または既存 `OutGameInput.inputactions` の action 参照)、`GCAllocTestSpawner` → `Mouse.current` | 差分が小さく根治。`activeInputHandler=Both` のままで可。KzSUnity 側 1 PR |
+| **(a) ゲーム側を新 system 読みに寄せる (採用)** | GameUnity の legacy 読み出しは 3 箇所のみ (§3.1)。`ErrorReporterUpdater` → `Keyboard.current.spaceKey.wasPressedThisFrame`、`LRButtonBase.GetAxisRaw("Horizontal")` → `Keyboard.current.leftArrowKey/rightArrowKey` (または既存 `OutGameInput.inputactions` の action 参照)、`GCAllocTestSpawner` → `Mouse.current` | 差分が小さく根治。`activeInputHandler=Both` のままで可。GameUnity 側 1 PR |
 | (b) bridge が両系統を駆動 (Win32 `SendInput` 併用 shim) | `/key` 受信時に Input System へ queue しつつ `SendInput` も発行 | focus 必須 (Custos が nut-js で既にやっており、それを捨てるのが本 bridge の目的)。二重入力の打ち消し制御も複雑。不採用 |
 | (c) `CustosInput.GetKey()` ラッパを全ゲームコードに強制 | 全 call site 書き換え + 規約強制 | 侵襲が (a) より大きく利点なし。不採用 |
 
 **決定: (a)。** bridge パッケージは Input System 専用と割り切り、README/導入ガイドに
 「legacy `Input.*` 読みには届かない。`grep -rn "Input\.Get" Assets/` で洗い出して移行せよ」を明記する。
-KzSUnity への導入タスクに上記 3 箇所の移行を含める (実装担当への引き継ぎ事項)。
+GameUnity への導入タスクに上記 3 箇所の移行を含める (実装担当への引き継ぎ事項)。
 他プロジェクトで legacy が本線の場合も同方針 (移行が前提条件、bridge 側では救済しない)。
 
 ---
@@ -385,12 +385,12 @@ unity/com.ludiars.custos-bridge/
 
 - SRP: HTTP / 設定 / dispatch / 入力 / capture / bootstrap を全部別ファイル。`BridgeServer` は
   provider と injector を interface で受け取り、Unity API を直接触らない。
-- KzSUnity からの参照: `KzSUnity/Packages/manifest.json` に
+- GameUnity からの参照: `GameUnity/Packages/manifest.json` に
   `"com.ludiars.custos-bridge": "file:../../../Custos/unity/com.ludiars.custos-bridge"`
   (local path、開発中) → 安定後は git URL
   `"https://github.com/LUDIARS/Custos.git?path=unity/com.ludiars.custos-bridge#<tag>"` に切替可。
 
-### 6.1 KzSUnity 導入チェックリスト (実装担当向け)
+### 6.1 GameUnity 導入チェックリスト (実装担当向け)
 
 1. manifest.json に local path 参照を追加。
 2. `Assets/Scripts/Editor/Musa/UnityErgoCustosBridge.cs` を削除 (port/inject 二重化防止)。
@@ -409,7 +409,7 @@ curl -X POST http://127.0.0.1:17778/key -H "content-type: application/json" -d '
 curl -X POST http://127.0.0.1:17778/key -d '{"code":26,"down":false}'                                      # W up
 ```
 
-- Custos web UI のバーチャルキーで KzSUnity の Player が移動し (W/A/S/D = HID 26/4/22/7)、
+- Custos web UI のバーチャルキーで GameUnity の Player が移動し (W/A/S/D = HID 26/4/22/7)、
   screenshot ストリームに反映されること。
 - 押しっぱなし (down→数秒→up) で移動が継続すること (state 蓄積の検証)。
 - Editor 非フォーカス状態で上記が動くこと。
@@ -421,7 +421,7 @@ curl -X POST http://127.0.0.1:17778/key -d '{"code":26,"down":false}'           
 | # | 項目 | 推奨/既定 | 参照 |
 |---|------|----------|------|
 | 1 | AsyncGPUReadback の行順 (D3D11) | `graphicsUVStartsAtTop` で CPU 行逆順 | §2.1 |
-| 2 | KzSUnity の ColorSpace と staging RT の sRGB 指定 | `RenderTextureReadWrite.sRGB` | §2.1 |
+| 2 | GameUnity の ColorSpace と staging RT の sRGB 指定 | `RenderTextureReadWrite.sRGB` | §2.1 |
 | 3 | Game View 非表示/最小化時の ScreenCapture 挙動 | 503 + auto フォールバック | §2.2 |
 | 4 | `SubmitRenderRequest` + `SingleCameraRequest` の EditMode 動作 (URP 17) | 採用、失敗時 PrintWindow | §2.2 |
 | 5 | 物理キーボード操作時の `Keyboard.current` 切替と仮想押下 state の可視性 | 既知制約として文書化 | §3.3 |

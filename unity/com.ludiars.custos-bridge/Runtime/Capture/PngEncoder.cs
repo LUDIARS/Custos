@@ -2,7 +2,7 @@
 //
 // 要検証 (spec/unity-bridge.md §7 #1 #2):
 //   1. AsyncGPUReadback の行順は Graphics API 依存。
-//      D3D11 (Windows / KzSUnity 想定) では SystemInfo.graphicsUVStartsAtTop == true となり
+//      D3D11 (Windows / GameUnity 想定) では SystemInfo.graphicsUVStartsAtTop == true となり
 //      top-down データが返るので通常反転不要だが、テクスチャ座標系とのズレが生じた場合は
 //      FlipRows() でフリップする。
 //   2. Linear color space プロジェクトでは staging RT を sRGB フォーマットで作ること

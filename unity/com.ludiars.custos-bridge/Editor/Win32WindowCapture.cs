@@ -1,6 +1,6 @@
 // Win32WindowCapture.cs — PrintWindow P/Invoke (Windows Editor 限定フォールバック)
 //
-// プロトタイプ (KzSUnity/Assets/Scripts/Editor/Musa/UnityErgoCustosBridge.cs) の
+// プロトタイプ (GameUnity/Assets/Scripts/Editor/Musa/UnityErgoCustosBridge.cs) の
 // CaptureWindowPng + 関連 P/Invoke をそのまま移植。
 //
 // 用途: captureMode = "window" または "auto" でのフォールバック。

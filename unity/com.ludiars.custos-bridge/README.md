@@ -32,7 +32,7 @@ ffmpeg -f rawvideo -pix_fmt bgra -s WxH -r F -i pipe:0 ...
 
 ## インストール
 
-### KzSUnity / ローカル開発 (local path)
+### GameUnity / ローカル開発 (local path)
 
 `Packages/manifest.json` に追加:
 

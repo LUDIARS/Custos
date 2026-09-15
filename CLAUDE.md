@@ -69,7 +69,7 @@ HTTP ブリッジ** に向ける。プロトコルは ergo_custos と Unity ブ�
    (gdigrab/x11grab/avfoundation + bridge `/stream` rawvideo) と
    `src/capture/webrtc-broker.ts` (werift)。POST /api/apps/:id/rtc/offer で SDP 交換。
    codec 契約 (H.264 baseline / pt96 / packetization-mode=1 / MTU1200) は
-   KZS-Web (`tools/kzs-web/src/plugins/rtc`) と一致させる。
+   game-web (`tools/game-web/src/plugins/rtc`) と一致させる。
 2. **Cernere 認証** — `@ludiars/cernere-service-adapter` で WS / REST 両面に
    middleware を挟む。frontend に Composite ログイン画面を追加。
 3. **Android target** — `src/input/android.ts` に `adb shell input keyevent`

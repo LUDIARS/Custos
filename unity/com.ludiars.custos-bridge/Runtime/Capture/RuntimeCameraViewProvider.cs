@@ -59,7 +59,7 @@ namespace Ludiars.Custos.Bridge.Capture
             }
 
             // TODO(要検証 #2): Linear ColorSpace では RenderTextureReadWrite.sRGB を指定すること。
-            //   KzSUnity の PlayerSettings.colorSpace を確認して下記を調整する。
+            //   GameUnity の PlayerSettings.colorSpace を確認して下記を調整する。
             _stagingRt = new RenderTexture(w, h, 0,
                 RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
             _stagingRt.hideFlags = HideFlags.HideAndDontSave;

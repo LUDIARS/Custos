@@ -41,8 +41,8 @@
 }
 ```
 
-- **KzSUnity の具体例** (`E:/Document/Ars/PrivateGame/KzSUnity`):
-  `Packages` → `KzSUnity` → `PrivateGame` → `Ars` と 3 つ上がって `Custos/...` なので
+- **GameUnity の具体例** (`E:/Document/Ars/PrivateGame/GameUnity`):
+  `Packages` → `GameUnity` → `PrivateGame` → `Ars` と 3 つ上がって `Custos/...` なので
 
   ```json
   "com.ludiars.custos-bridge": "file:../../../Custos/unity/com.ludiars.custos-bridge"
@@ -167,13 +167,13 @@
 
 1. **Active Input Handling**: `ProjectSettings/ProjectSettings.asset` の
    `activeInputHandler` が `1` (Input System) か `2` (Both) であること。
-   KzSUnity は `2` (Both) で確認済。
+   GameUnity は `2` (Both) で確認済。
 2. **legacy 読み出しの洗い出し** (注入が効かない箇所を特定):
    ```sh
    grep -rn "Input\.GetKey\|Input\.GetAxis\|Input\.GetButton\|Input\.GetMouse" <Project>/Assets
    ```
    ヒットしたゲームプレイ入力は新 Input System (`Keyboard.current[Key.X]` /
-   InputActions) へ移行する。KzSUnity は 3 箇所 (debug/option UI) のみ。
+   InputActions) へ移行する。GameUnity は 3 箇所 (debug/option UI) のみ。
 3. **非フォーカス時の入力** (リモート操作では Editor/Player が非アクティブになりがち):
    `Edit > Project Settings > Input System Package > Background Behavior` を
    `Ignore Focus` にする (ブリッジは自動変更しない)。
@@ -257,7 +257,7 @@ Custos 経由の WebRTC:
 | Editor で起動しない | §3-B: config `enabled:true` だけでは不十分。メニュー `LUDIARS/Custos Bridge/Enabled` を ON にするか補助スクリプトを置く |
 | `/key` が効かない | §4: legacy `Input.Get*` で読んでいる。新 Input System へ移行。または `activeInputHandler` が `0` (legacy only) |
 | Player で起動しない | Development Build (`BuildOptions.Development`) でビルドしているか。Release は `DEVELOPMENT_BUILD` 未定義でコードごと無効 |
-| ポート衝突 | 旧プロトタイプ `KzSUnity/Assets/Scripts/Editor/Musa/UnityErgoCustosBridge.cs` (port 8687) が残っていると役割重複。削除推奨 |
+| ポート衝突 | 旧プロトタイプ `GameUnity/Assets/Scripts/Editor/Musa/UnityErgoCustosBridge.cs` (port 8687) が残っていると役割重複。削除推奨 |
 | `/stream` が空 | EditMode では配信されない (PlayMode 限定)。再生中か確認 |
 | 画面が上下反転 / 色が変 | ColorSpace=Linear や D3D11 の readback 行順。`spec/unity-bridge.md` §7 の要検証項目 |
 | 401 unauthorized | `token` 設定時は `X-Auth-Token` ヘッダ必須 (`BridgeServer.cs:147`) |

@@ -64,7 +64,7 @@ ergo_custos と Unity ブリッジで共通:
 gdigrab ではなくブリッジの `/stream` になる。`/stream` のレスポンスヘッダ
 (`X-Frame-Width/Height/Pixfmt/Fps`) から寸法を読み、`ffmpeg -f rawvideo
 -pix_fmt bgra -s WxH -r F -i pipe:0 → -f rtp` で H.264 化して werift に流す
-(KZS-Web の visus 経路と同型)。
+(game-web の visus 経路と同型)。
 
 ```jsonc
 "inAppBridge": {

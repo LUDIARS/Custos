@@ -361,14 +361,14 @@
             "description": "Vampire Survivors 系 Unity ゲーム。BuildCommand.Build で Standalone を吐いて C:/Build/<name>.exe を起動する。Editor の PlayMode を直接叩きたい場合は別 entry `PrivateGame-editor` を使う。",
             "target": "desktop",
             "build": {
-                "workingDir": "E:/Document/PrivateGame/KzSUnity",
+                "workingDir": "E:/Document/PrivateGame/GameUnity",
                 "cmd": "C:/Program Files/Unity/Editor/Unity.exe",
                 "args": [
                     "-batchmode",
                     "-quit",
                     "-nographics",
                     "-projectPath",
-                    "E:/Document/PrivateGame/KzSUnity",
+                    "E:/Document/PrivateGame/GameUnity",
                     "-executeMethod",
                     "BuildCommand.Build",
                     "-platform",
@@ -383,17 +383,17 @@
                 "timeoutSec": 1800
             },
             "run": {
-                "workingDir": "E:/Document/PrivateGame/KzSUnity/Build",
+                "workingDir": "E:/Document/PrivateGame/GameUnity/Build",
                 "cmd": "PrivateGame.exe"
             },
             "test": {
-                "workingDir": "E:/Document/PrivateGame/KzSUnity",
+                "workingDir": "E:/Document/PrivateGame/GameUnity",
                 "cmd": "C:/Program Files/Unity/Editor/Unity.exe",
                 "args": [
                     "-batchmode",
                     "-runTests",
                     "-projectPath",
-                    "E:/Document/PrivateGame/KzSUnity",
+                    "E:/Document/PrivateGame/GameUnity",
                     "-testPlatform",
                     "EditMode",
                     "-logFile",
@@ -488,7 +488,7 @@
         {
             "id": "PrivateGame-editor",
             "name": "PrivateGame (Unity Editor PlayMode)",
-            "description": "起動済みの Unity Editor を駆動するモード。Build = UnityCommandServer (port 8686) の /api/recompile + compile-status ポーリング、Run = /api/play-start + isPlaying ポーリングループ。キー入力・スクリーンショット・WebRTC 動画は com.ludiars.custos-bridge (port 17778) 経由: /key で InputSystem に直接注入、/screenshot で Game View スナップショット、/stream で Game View を毎フレーム AsyncGPUReadback して raw BGRA を Custos に流し ffmpeg→werift で WebRTC 配信する (ホスト nut-js / gdigrab を bypass)。導入は KzSUnity の Packages/manifest.json に local path 追加 → プロジェクトルートに custos_bridge.json (port 17778) → メニュー LUDIARS/Custos Bridge/Enabled。captureMode (camera/window/auto) は custos_bridge.json 側。Custos kill 時は PowerShell の finally で /api/play-stop を試みるが、taskkill /F だと走らないので Editor 側で手動 Stop が必要なことがある。",
+            "description": "起動済みの Unity Editor を駆動するモード。Build = UnityCommandServer (port 8686) の /api/recompile + compile-status ポーリング、Run = /api/play-start + isPlaying ポーリングループ。キー入力・スクリーンショット・WebRTC 動画は com.ludiars.custos-bridge (port 17778) 経由: /key で InputSystem に直接注入、/screenshot で Game View スナップショット、/stream で Game View を毎フレーム AsyncGPUReadback して raw BGRA を Custos に流し ffmpeg→werift で WebRTC 配信する (ホスト nut-js / gdigrab を bypass)。導入は GameUnity の Packages/manifest.json に local path 追加 → プロジェクトルートに custos_bridge.json (port 17778) → メニュー LUDIARS/Custos Bridge/Enabled。captureMode (camera/window/auto) は custos_bridge.json 側。Custos kill 時は PowerShell の finally で /api/play-stop を試みるが、taskkill /F だと走らないので Editor 側で手動 Stop が必要なことがある。",
             "target": "desktop",
             "inAppBridge": {
                 "kind": "unity",
@@ -497,7 +497,7 @@
                 "fps": 24
             },
             "build": {
-                "workingDir": "E:/Document/PrivateGame/KzSUnity",
+                "workingDir": "E:/Document/PrivateGame/GameUnity",
                 "cmd": "powershell.exe",
                 "args": [
                     "-NoProfile",
@@ -508,7 +508,7 @@
                 "timeoutSec": 600
             },
             "run": {
-                "workingDir": "E:/Document/PrivateGame/KzSUnity",
+                "workingDir": "E:/Document/PrivateGame/GameUnity",
                 "cmd": "powershell.exe",
                 "args": [
                     "-NoProfile",

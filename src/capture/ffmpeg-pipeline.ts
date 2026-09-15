@@ -180,7 +180,7 @@ export interface FfmpegStartOptions {
 /**
  * bridge-stream モード用 ffmpeg 引数 (入力 = stdin から rawvideo)。
  *
- * kzs-web の `buildVisusFfmpegArgs` と同形。入力側は
+ * game-web の `buildVisusFfmpegArgs` と同形。入力側は
  *   `-f rawvideo -pix_fmt <pixfmt> -s <W>x<H> -r <fps> -i pipe:0`
  * で stdin を rawvideo として受け取り、encoderArgs で H.264 に圧縮して
  * RTP に流す。`-re` は不要 (bridge 側が既に fps ペースで吐く)。

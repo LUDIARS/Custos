@@ -80,7 +80,7 @@ namespace Ludiars.Custos.Bridge.Tests
             Assert.AreEqual(Key.None, HidKeyMap.ToKey(255));
         }
 
-        // KzSUnity の実際に使われるキー (PlayerInputActions.inputactions の binding から)
+        // GameUnity の実際に使われるキー (PlayerInputActions.inputactions の binding から)
         [Test]
         public void GameplayCriticalKeys_W_A_S_D_AreCorrect()
         {
