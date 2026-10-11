@@ -110,6 +110,8 @@ namespace Ludiars.Custos.Bridge.Editor
 #if ENABLE_INPUT_SYSTEM
             var injector = new Input.VirtualKeyboardInjector();
             injector.Initialize();
+            var pointerInjector = new Input.VirtualPointerInjector();
+            pointerInjector.Initialize();
 #endif
 
             // hidden GameObject (EditorSceneManager と DontDestroyOnLoad の外に置く)
@@ -145,6 +147,9 @@ namespace Ludiars.Custos.Bridge.Editor
                 },
                 CustosCapturePublisher.PublishAsync);
 
+#if ENABLE_INPUT_SYSTEM
+            _server.OnPointer = (x, y, button, phase) => pointerInjector.InjectPointer(x, y, button, phase);
+#endif
             _server.Start();
 
             // quitting で injector も片付ける
@@ -152,6 +157,7 @@ namespace Ludiars.Custos.Bridge.Editor
             {
 #if ENABLE_INPUT_SYSTEM
                 injector.Shutdown();
+                pointerInjector.Shutdown();
 #endif
             };
         }

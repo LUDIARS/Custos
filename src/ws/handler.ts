@@ -21,7 +21,9 @@ import type {
     ServerMessage,
     AppStatus,
 } from "../shared/types.js";
-import { sendKey, sendClick } from "../input/forwarder.js";
+import { sendKey, sendClick, sendPointer } from "../input/forwarder.js";
+import type { PlayLogRecorder } from "../playlog/playlog-recorder.js";
+import { isPointerMessage } from "./pointer-message.js";
 import { getCernereAuth, type VerifiedUser } from "../auth/cernere-auth.js";
 import type { ScreenshotStreamer, ScreenshotFrame } from "../capture/screenshot-stream.js";
 
@@ -38,6 +40,8 @@ export interface WsBrokerDeps {
     registry:   AppsRegistry;
     runner:     AppsRunner;
     streamer:   ScreenshotStreamer;
+    /** 行動ログ。未指定なら記録しない。 */
+    playLog?:   PlayLogRecorder;
 }
 
 export function attachWebSocketBroker(
@@ -81,6 +85,7 @@ export function attachWebSocketBroker(
         ws.on("close", () => {
             // 切断 session が持っていた auto-stream 購読を一括 release。
             deps.streamer.releaseAll(session.id);
+            deps.playLog?.closeSession(session.id, "disconnect");
             sessions.delete(session.id);
             log.info({ sessionId: session.id }, "ws disconnected");
         });
@@ -134,7 +139,7 @@ export function attachWebSocketBroker(
 async function handleClient(
     session: Session,
     msg: ClientMessage,
-    { registry, streamer }: WsBrokerDeps,
+    { registry, streamer, playLog }: WsBrokerDeps,
 ): Promise<void> {
     switch (msg.type) {
         case "subscribe": {
@@ -153,11 +158,15 @@ async function handleClient(
         case "unsubscribe": {
             session.appIds.delete(msg.appId);
             streamer.release(msg.appId, session.id);
+            playLog?.closeSessionApp(session.id, msg.appId, "unsubscribe");
             return;
         }
         case "key": {
             const cfg = registry.getConfig(msg.appId);
             if (!cfg || !session.appIds.has(msg.appId)) return;
+            if (cfg.input.allowKeyboard) {
+                playLog?.recordInput(session.id, session.user.id, msg.appId, { device: "key", key: msg.key, down: msg.down });
+            }
             await sendKey(cfg, msg.key, msg.down);
             return;
         }
@@ -165,6 +174,21 @@ async function handleClient(
             const cfg = registry.getConfig(msg.appId);
             if (!cfg || !session.appIds.has(msg.appId)) return;
             await sendClick(cfg, msg.x, msg.y, msg.button);
+            return;
+        }
+        case "pointer": {
+            if (!isPointerMessage(msg)) {
+                send(session.ws, { type: "error", message: "invalid pointer message" });
+                return;
+            }
+            const cfg = registry.getConfig(msg.appId);
+            if (!cfg || !session.appIds.has(msg.appId)) return;
+            if (cfg.input.allowMouse) {
+                playLog?.recordInput(session.id, session.user.id, msg.appId, {
+                    device: "pointer", x: msg.x, y: msg.y, button: msg.button, phase: msg.phase,
+                });
+            }
+            await sendPointer(cfg, msg.x, msg.y, msg.button, msg.phase);
             return;
         }
         case "button": {
@@ -184,6 +208,7 @@ async function handleClient(
                 return;
             }
             if (btn.key) {
+                playLog?.recordInput(session.id, session.user.id, msg.appId, { device: "button", id: msg.id });
                 // 短い tap として press → release
                 await sendKey(cfg, btn.key, true);
                 await new Promise((r) => setTimeout(r, 50));

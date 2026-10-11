@@ -76,6 +76,84 @@ export async function sendKeyCode(
     }
 }
 
+export type PointerButton = "left" | "right" | "middle";
+export type PointerPhase  = "down" | "up" | "move";
+
+const POINTER_BUTTON_CODE: Record<PointerButton, number> = { left: 0, right: 1, middle: 2 };
+
+/// `POST /pointer` `{ x, y, button, phase }` を叩く。x / y は画面左上原点の 0..1。
+/// ergo ブリッジなど未対応の相手は 404 を返すので {@link BridgeUnsupportedError} にする。
+export async function sendPointerEvent(
+    ep: EndpointConfig,
+    x: number,
+    y: number,
+    button: PointerButton,
+    phase: PointerPhase,
+): Promise<void> {
+    const res = await postJson(ep, "/pointer", { x, y, button: POINTER_BUTTON_CODE[button], phase });
+    if (res.status === 404) throw new BridgeUnsupportedError("/pointer");
+    if (!res.ok && res.status !== 204) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(`in-app bridge /pointer ${res.status}: ${txt.slice(0, 200)}`);
+    }
+}
+
+/// `GET /state` の応答。`state` はゲームが登録した 1 オブジェクト (未登録なら null)。
+export interface BridgeState {
+    isPlaying: boolean;
+    state:     Record<string, unknown> | null;
+}
+
+/// `GET /state` を叩く。未対応 (404) は {@link BridgeUnsupportedError}。
+export async function fetchBridgeState(ep: EndpointConfig): Promise<BridgeState> {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), KEY_TIMEOUT_MS);
+    try {
+        const res = await fetch(`http://${ep.host}:${ep.port}/state`, { signal: ctrl.signal });
+        if (res.status === 404) throw new BridgeUnsupportedError("/state");
+        if (!res.ok) throw new Error(`in-app bridge /state ${res.status}`);
+        return parseBridgeState(await res.json() as unknown);
+    } finally {
+        clearTimeout(t);
+    }
+}
+
+export function parseBridgeState(body: unknown): BridgeState {
+    const obj = isPlainObject(body) ? body : {};
+    const state = obj["state"];
+    return {
+        isPlaying: obj["isPlaying"] === true,
+        state:     isPlainObject(state) ? state : null,
+    };
+}
+
+/// ブリッジがその endpoint を持たない (404)。
+export class BridgeUnsupportedError extends Error {
+    constructor(readonly endpoint: string) {
+        super(`in-app bridge does not support ${endpoint}`);
+        this.name = "BridgeUnsupportedError";
+    }
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+    return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+async function postJson(ep: EndpointConfig, path: string, payload: unknown): Promise<Response> {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), KEY_TIMEOUT_MS);
+    try {
+        return await fetch(`http://${ep.host}:${ep.port}${path}`, {
+            method:  "POST",
+            headers: { "content-type": "application/json" },
+            body:    JSON.stringify(payload),
+            signal:  ctrl.signal,
+        });
+    } finally {
+        clearTimeout(t);
+    }
+}
+
 /// キー名 (フロントエンドのバーチャルキー定義の `key` 文字列) を HID usage 風
 /// `KeyCode` (uint16_t) にマップする。ergo / Unity どちらのブリッジも
 /// 同じコード体系を使う前提。

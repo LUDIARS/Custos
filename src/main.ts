@@ -25,6 +25,9 @@ import { ScreenshotStreamer } from "./capture/screenshot-stream.js";
 import { RuntimeStreamPrefs } from "./runtime/stream-prefs.js";
 import { logger } from "./shared/logger.js";
 import { loadFarmRuntime } from "./farm/runtime.js";
+import { resolve } from "node:path";
+import { PlayLogRecorder } from "./playlog/playlog-recorder.js";
+import { hashPlayer, resolvePlayerSalt } from "./playlog/player-hash.js";
 
 const BACKEND_PORT  = Number(process.env.CUSTOS_PORT          ?? 7676);
 const FRONTEND_PORT = Number(process.env.CUSTOS_FRONTEND_PORT ?? 4649);
@@ -65,10 +68,20 @@ async function main() {
     const broker   = new WebRTCBroker();
     const prefs    = new RuntimeStreamPrefs();
     const streamer = new ScreenshotStreamer(registry, prefs);
+    // 行動ログ (spec/feature/remote-play-and-play-log.md)。salt はログを書くときだけ要るので
+    // playLog を持つ app が 1 つも無ければ作らない。
+    const playLogDir = resolve(process.env.CUSTOS_PLAYLOG_DIR ?? resolve(process.cwd(), "logs", "plays"));
+    let playerSalt: string | null = null;
+    const playLog = new PlayLogRecorder({
+        dir:        playLogDir,
+        getConfig:  (appId) => registry.getConfig(appId),
+        hashPlayer: (userId) => hashPlayer(playerSalt ??= resolvePlayerSalt(playLogDir), userId),
+    });
 
     runner.on("exit", (appId, kind) => {
         if (kind === "run") {
             broker.closeAllForApp(appId);
+            playLog.closeApp(appId, "exit");
             // アプリ終了で auto-stream も止める。再起動後 subscribe があれば
             // streamer.acquire 経由で再開される。
             streamer.stop(appId);
@@ -76,7 +89,7 @@ async function main() {
     });
 
     // 単一の app instance を 2 ポートで listen させる。
-    const app = buildApp({ registry, runner, broker, prefs, farm });
+    const app = buildApp({ registry, runner, broker, prefs, farm, playLogDir });
     const servers: HttpServer[] = [];
 
     // 非 loopback に bind するなら認証必須。CERNERE_URL 未設定 (anonymous 許可) や
@@ -107,7 +120,7 @@ async function main() {
             logger.info({ host: info.address, port: info.port, label }, "listening");
         });
         // WS broker は全ポートで attach する (どちらに繋いでも /ws が動く)。
-        attachWebSocketBroker(s as unknown as HttpServer, { registry, runner, streamer }, "/ws");
+        attachWebSocketBroker(s as unknown as HttpServer, { registry, runner, streamer, playLog }, "/ws");
         servers.push(s as unknown as HttpServer);
     }
 
@@ -120,6 +133,7 @@ async function main() {
         logger.info({ sig }, "shutting down");
         broker.shutdown();
         streamer.shutdown();
+        playLog.shutdown();
         runner.shutdown();
         for (const s of servers) {
             try { s.close(); } catch { /* ignore */ }

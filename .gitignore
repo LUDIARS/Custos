@@ -10,3 +10,6 @@ out/
 
 # Anatomia のローカル状態 (ドメイン定義の正本は spec/domains/)
 .anatomia/
+
+# 遠隔プレイの行動ログ (個人の操作記録。リポに入れない)
+logs/plays/

@@ -12,6 +12,7 @@
 
 import { connectWebRTC, closeWebRTC } from "/js/webrtc.js";
 import { createUnityPanel } from "/js/unity-panel.js";
+import { createPlayInput } from "/js/play-input.js";
 
 // **同 origin 運用**: backend と frontend は同じ Hono に乗っているので、
 // API も WS も相対 URL でよい。CORS / config.js 注入は不要。
@@ -100,6 +101,16 @@ const state = {
 };
 const CAPTURE_MODE_KEY = "custos.captureMode";
 const unityPanel = createUnityPanel({ apiFetch, getAppId: () => state.appId });
+const playInput = createPlayInput({
+    frame:     $("streamFrame"),
+    toggle:    $("playToggle"),
+    hint:      $("playHint"),
+    getMedia:  () => streamVideo.classList.contains("active") ? streamVideo
+        : streamImage.classList.contains("active") ? streamImage : null,
+    getAppId:  () => state.appId,
+    getConfig: () => state.selectedConfig,
+    send:      (msg) => wsSend(msg),
+});
 
 // ─── boot ───────────────────────────────────────
 async function boot() {
@@ -282,6 +293,7 @@ async function onAppChange() {
     state.appId = id || null;
     state.selectedConfig = state.apps.find((a) => a.config.id === id)?.config ?? null;
     unityPanel.setApp(state.selectedConfig);
+    playInput.onAppChanged();
     renderVirtualKeys();
     updateActionButtons();
 

@@ -13,7 +13,14 @@
 import { childLogger } from "../shared/logger.js";
 import type { AppConfig } from "../config/apps-config.js";
 import { androidSendKey, androidSendTap } from "./android.js";
-import { sendKeyCode, keyNameToErgoCode } from "../capture/ergo-custos-client.js";
+import {
+    sendKeyCode,
+    keyNameToErgoCode,
+    sendPointerEvent,
+    BridgeUnsupportedError,
+    type PointerButton,
+    type PointerPhase,
+} from "../capture/ergo-custos-client.js";
 
 const log = childLogger("input");
 
@@ -133,4 +140,51 @@ export async function sendClick(
     await nut.mouse.setPosition(new nut.Point(x, y));
     if (button === "right") await nut.mouse.rightClick();
     else                    await nut.mouse.leftClick();
+}
+
+/** 未対応を warn 済みの app (同じ warn を入力のたびに出さない)。 */
+const pointerUnsupportedWarned = new Set<string>();
+
+/**
+ * 遠隔プレイのポインタ (配信映像の左上原点 0..1)。
+ *
+ * inAppBridge 経由のみ対応。ブリッジ無しの desktop / android はウィンドウ内の
+ * ピクセル座標が分からないので送らない (従来の `click` を使う)。
+ */
+export async function sendPointer(
+    app: AppConfig,
+    x: number,
+    y: number,
+    button: PointerButton,
+    phase: PointerPhase,
+): Promise<void> {
+    if (!app.input.allowMouse) {
+        log.warn({ appId: app.id }, "mouse input disabled by app config");
+        return;
+    }
+    if (!app.inAppBridge) {
+        warnPointerUnsupportedOnce(app.id, "pointer needs inAppBridge — ignored");
+        return;
+    }
+    try {
+        await sendPointerEvent(app.inAppBridge, clamp01(x), clamp01(y), button, phase);
+    } catch (err) {
+        if (err instanceof BridgeUnsupportedError) {
+            warnPointerUnsupportedOnce(app.id, "in-app bridge has no /pointer — ignored");
+            return;
+        }
+        const msg = err instanceof Error ? err.message : String(err);
+        log.warn({ appId: app.id, phase, msg }, "in-app bridge pointer send failed");
+    }
+}
+
+export function clamp01(v: number): number {
+    if (!Number.isFinite(v)) return 0;
+    return Math.min(1, Math.max(0, v));
+}
+
+function warnPointerUnsupportedOnce(appId: string, message: string): void {
+    if (pointerUnsupportedWarned.has(appId)) return;
+    pointerUnsupportedWarned.add(appId);
+    log.warn({ appId }, message);
 }

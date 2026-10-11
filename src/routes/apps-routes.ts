@@ -107,6 +107,8 @@ export function redact(cfg: import("../config/apps-config.js").AppConfig) {
             ? { type: cfg.capture.type, fps: cfg.capture.fps }
             : null,
         input:       cfg.input,   // buttons は UI が読むので公開
+        // 遠隔プレイ時に「記録中」を出すため有効/無効だけ公開する。
+        playLog:     { enabled: cfg.playLog?.enabled === true },
     };
 }
 

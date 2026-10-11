@@ -13,6 +13,24 @@ port 既定: **17778** (loopback only)
 | GET | `/screenshot` | PNG スナップショット |
 | POST | `/key` | `{"code":<HID int>,"down":<bool>}` — 入力注入 |
 | GET | `/stream?fps=<F>` | 連続 raw BGRA8 フレームストリーム (詳細後述) |
+| POST | `/pointer` | `{"x":0..1,"y":0..1,"button":0\|1\|2,"phase":"down"\|"up"\|"move"}` — 仮想 Mouse へ注入 (左上原点の正規化座標) |
+| GET | `/state` | `{"isPlaying":bool,"state":<object\|null>}` — ゲームが登録した状態 (行動ログ用) |
+
+### ゲーム状態を行動ログに載せる (`CustosPlayState`)
+
+Custos の行動ログ (`playLog`) は `/state` を周期取得し、返った JSON の各キーを
+`state.<key>` 列に入れる。オートプレイヤー (Commentarii) が人間プレイとして取り込むには
+少なくともステージ (`stage`) を入れる。位置は `[x, y, z]` の配列で入れる。
+
+```csharp
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+Ludiars.Custos.Bridge.CustosPlayState.Register(() =>
+    JsonUtility.ToJson(new PlayStateDto { stage = currentStageId, hp = player.Hp / player.MaxHp }));
+#endif
+```
+
+本パッケージは Editor と Development Build でしか compile されないので、呼び出しも同じ `#if` で囲む。
+プレイヤー名・メールなど個人を特定する値は入れない。詳細は `spec/feature/remote-play-and-play-log.md`。
 
 ### `/stream` ヘッダ仕様
 

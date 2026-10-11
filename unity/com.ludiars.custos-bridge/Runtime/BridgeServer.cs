@@ -8,6 +8,8 @@
 //   - /key は enqueue → 即 200 (fire-and-forget)
 //   - /screenshot は coalescing pending + ManualResetEventSlim でブロック (timeout 7s)
 //   - /stream は配信スレッドへそのまま渡す (ブロッキング)
+//   - /pointer は enqueue → 即 200 (fire-and-forget、spec/feature/remote-play-and-play-log.md §1.1)
+//   - /state は main thread で CustosPlayState を取り、最大 500ms 待って返す
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
 
 using System;
@@ -73,6 +75,12 @@ namespace Ludiars.Custos.Bridge
         // ── 公開 API ─────────────────────────────────────
 
         public bool IsRunning => _isRunning;
+
+        /// <summary>
+        /// ポインタ注入コールバック (x01, y01, button, phase)。main thread dispatcher 経由で呼ばれる。
+        /// 未設定なら /pointer は 503。<see cref="Start"/> 前に設定する。
+        /// </summary>
+        public Action<float, float, int, string> OnPointer { get; set; }
 
         public void Start()
         {
@@ -170,6 +178,14 @@ namespace Ludiars.Custos.Bridge
                 case "/key":
                     if (req.HttpMethod != "POST") { HttpJson.WriteJson(res, 405, "{\"error\":\"POST only\"}"); return; }
                     HandleKey(req, res);
+                    break;
+                case "/pointer":
+                    if (req.HttpMethod != "POST") { HttpJson.WriteJson(res, 405, "{\"error\":\"POST only\"}"); return; }
+                    HandlePointer(req, res);
+                    break;
+                case "/state":
+                    if (req.HttpMethod != "GET") { HttpJson.WriteJson(res, 405, "{\"error\":\"GET only\"}"); return; }
+                    HandleState(res);
                     break;
                 case "/stream":
                     if (req.HttpMethod != "GET") { HttpJson.WriteJson(res, 405, "{\"error\":\"GET only\"}"); return; }
@@ -282,6 +298,56 @@ namespace Ludiars.Custos.Bridge
             });
 
             HttpJson.WriteJson(res, 200, "{\"ok\":true}");
+        }
+
+        // ── /pointer ─────────────────────────────────────
+
+        private void HandlePointer(HttpListenerRequest req, HttpListenerResponse res)
+        {
+            var onPointer = OnPointer;
+            if (onPointer == null) { HttpJson.WriteJson(res, 503, "{\"error\":\"pointer injection unavailable\"}"); return; }
+
+            string body;
+            try
+            {
+                using var sr = new StreamReader(req.InputStream, req.ContentEncoding ?? Encoding.UTF8);
+                body = sr.ReadToEnd();
+            }
+            catch (Exception e)
+            {
+                HttpJson.WriteJson(res, 400, $"{{\"error\":\"read body: {HttpJson.Escape(e.Message)}\"}}");
+                return;
+            }
+
+            PointerPayload payload;
+            try { payload = JsonUtility.FromJson<PointerPayload>(body); }
+            catch { HttpJson.WriteJson(res, 400, "{\"error\":\"bad json\"}"); return; }
+            if (payload == null || !Input.PointerCoordinates.IsKnownPhase(payload.phase))
+            {
+                HttpJson.WriteJson(res, 400, "{\"error\":\"phase must be down|up|move\"}");
+                return;
+            }
+
+            MainThreadDispatcher.Enqueue(() => onPointer(payload.x, payload.y, payload.button, payload.phase));
+            HttpJson.WriteJson(res, 200, "{\"ok\":true}");
+        }
+
+        // ── /state ───────────────────────────────────────
+
+        private void HandleState(HttpListenerResponse res)
+        {
+            bool   isPlaying = false;
+            string stateJson = null;
+            using var gate = new ManualResetEventSlim(false);
+            MainThreadDispatcher.Enqueue(() =>
+            {
+                isPlaying = Application.isPlaying;
+                stateJson = CustosPlayState.Capture();
+                gate.Set();
+            });
+            if (!gate.Wait(500)) { HttpJson.WriteJson(res, 503, "{\"error\":\"main thread busy\"}"); return; }
+            HttpJson.WriteJson(res, 200,
+                $"{{\"isPlaying\":{(isPlaying ? "true" : "false")},\"state\":{stateJson ?? "null"}}}");
         }
 
         // ── /stream ──────────────────────────────────────

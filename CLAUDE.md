@@ -61,7 +61,11 @@ HTTP ブリッジ** に向ける。プロトコルは ergo_custos と Unity ブ�
 - Unity ブリッジ本体は `unity/com.ludiars.custos-bridge` (UPM パッケージ、C#)。
   HID usage コードは `ergo-custos-client.ts` の `KEY_TABLE` /
   `Runtime/Input/HidKeyMap.cs` / ergo `types.h` の 3 点を同期させる。
-- 設計の正本は `spec/unity-bridge.md`。
+- 設計の正本は `spec/feature/unity-bridge.md`。
+- 遠隔プレイ (`/pointer`) と行動ログ (`/state`、`src/playlog/`) の正本は
+  `spec/feature/remote-play-and-play-log.md`。行動ログの列 (`state.<key>` / `input` 名) は
+  Commentarii の `guide import plays` mapping が名前で引くので、変えるときは Commentarii の
+  `spec/feature/human-plays.md` と突き合わせる。`player` 列に生のユーザー ID を書かない。
 
 ## Phase 2 計画
 

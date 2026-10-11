@@ -51,4 +51,6 @@ export type ClientMessage =
     | { type: "unsubscribe"; appId: string }
     | { type: "key";         appId: string; key: string;  down: boolean }
     | { type: "click";       appId: string; x: number;    y: number; button?: "left" | "right" | "middle" }
+    /** 遠隔プレイのポインタ。x / y は配信映像の左上原点 0..1。 */
+    | { type: "pointer";     appId: string; x: number;    y: number; button: "left" | "right" | "middle"; phase: "down" | "up" | "move" }
     | { type: "button";      appId: string; id: string };

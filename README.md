@@ -45,6 +45,12 @@ npm run start
 - [x] **Unity ブリッジ** (`unity/com.ludiars.custos-bridge` UPM。Editor Game
       View / Runtime Camera をフックし `/stream` で WebRTC 動画、`/key` で
       InputSystem 注入。UnityRemote 型、port 17778)
+- [x] **遠隔プレイ** (配信画面の「遠隔プレイ」トグル。映像上のマウス / タッチを
+      ブリッジ `/pointer` へ、映像にフォーカス中の物理キーを `/key` へ送る。
+      [設計](spec/feature/remote-play-and-play-log.md))
+- [x] **行動ログ** (app 設定 `playLog`。操作とゲーム状態 (`/state`) を
+      `logs/plays/<appId>/<run>.jsonl` に記録し、Commentarii の
+      `guide import plays` で人間プレイとして取り込める。`GET /api/playlogs`)
 - [ ] **Cernere 認証** (Phase 2、`@ludiars/cernere-service-adapter`)
 - [ ] **Android emulator** (`target: "android"`、adb input keyevent)
 
@@ -59,6 +65,8 @@ ergo_custos と Unity ブリッジで共通:
 | GET  | `/screenshot`     | PNG スナップショット |
 | POST | `/key`            | `{code, down}` (code = USB HID usage) で入力注入 |
 | GET  | `/stream?fps=<F>` | raw BGRA8 連続フレーム (WebRTC 動画源) |
+| POST | `/pointer`        | `{x, y, button, phase}` (左上原点 0..1) でポインタ注入 (Unity のみ) |
+| GET  | `/state`          | `{isPlaying, state}` ゲームが `CustosPlayState.Register` した状態 (Unity のみ) |
 
 `inAppBridge` を設定すると、`POST /api/apps/:id/rtc/offer` の WebRTC 動画源が
 gdigrab ではなくブリッジの `/stream` になる。`/stream` のレスポンスヘッダ
@@ -124,7 +132,9 @@ Runtime Camera (Player ビルド) の両方をフックでき、`/stream` で We
 | POST   | `/api/apps/:id/run`        | run 開始 → runId, pid |
 | POST   | `/api/apps/:id/test`       | test 開始 → testId |
 | POST   | `/api/apps/:id/kill`       | run を SIGKILL |
-| WS     | `/ws?token=…`              | log / status / exit、key/click/button |
+| GET    | `/api/playlogs?appId=`     | 行動ログ一覧 |
+| GET    | `/api/playlogs/:appId/:run`| 行動ログ本体 (NDJSON) |
+| WS     | `/ws?token=…`              | log / status / exit、key/click/pointer/button |
 
 WS protocol は `src/shared/types.ts` の `ClientMessage` / `ServerMessage` 参照。
 
@@ -165,6 +175,8 @@ tests/
 | `CORS_ORIGIN`            | *    | CORS allow (frontend と backend が別 origin) |
 | `CUSTOS_FFMPEG`          | "ffmpeg" | キャプチャ用 ffmpeg 実行ファイル |
 | `CUSTOS_ADB`             | "adb" | Android 入力用 adb 実行ファイル |
+| `CUSTOS_PLAYLOG_DIR`     | logs/plays | 行動ログの置き場所 |
+| `CUSTOS_PLAYLOG_SALT`    | (自動生成) | 行動ログの `player` 列の HMAC salt。未設定なら `<dir>/.salt` を生成 |
 
 ## 自前の実機デバイスファーム（制御 API）
 

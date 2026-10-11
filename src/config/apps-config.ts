@@ -131,6 +131,15 @@ const inAppBridgeSchema = z.object({
     fps:  v.fps,
 }));
 
+/// 行動ログ設定。遠隔プレイの操作を JSONL に残し、Commentarii が人間プレイとして取り込む。
+const playLogSchema = z.object({
+    enabled:     z.boolean().default(true),
+    /** inAppBridge の `GET /state` を取得する間隔。 */
+    statePollMs: z.number().int().min(100).max(10_000).default(500),
+    /** 入力も状態変化も無い時間がこれを超えたら run を閉じる。 */
+    idleStopSec: z.number().int().min(10).max(86_400).default(300),
+});
+
 export const appConfigSchema = z.object({
     id:    z.string().regex(/^[a-z0-9][a-z0-9-]*$/i, "id は英数字 + ハイフン"),
     name:  z.string().min(1),
@@ -152,6 +161,8 @@ export const appConfigSchema = z.object({
     inAppBridge: inAppBridgeSchema.optional(),
     input:   inputSchema.default({ buttons: [], allowKeyboard: true, allowMouse: false }),
     logs:    logsSchema.default({ stdout: true, stderr: true, files: [] }),
+    /** 行動ログ (spec/feature/remote-play-and-play-log.md §2)。無ければ記録しない。 */
+    playLog: playLogSchema.optional(),
 }).transform((v) => {
     // ergoCustos (deprecated alias) を inAppBridge {kind:"ergo"} に正規化する。
     // inAppBridge が明示されていれば ergoCustos は無視 (inAppBridge 優先)。
@@ -174,6 +185,7 @@ export type AppConfig       = z.infer<typeof appConfigSchema>;
 export type CmdConfig       = z.infer<typeof cmdSchema>;
 export type AppsConfig      = z.infer<typeof appsRootSchema>;
 export type InAppBridgeConfig = z.infer<typeof inAppBridgeSchema>;
+export type PlayLogConfig     = z.infer<typeof playLogSchema>;
 
 // ─── Loader ─────────────────────────────────────────────────
 

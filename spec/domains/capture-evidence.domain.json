@@ -1,11 +1,14 @@
 {
   "name": "capture-evidence",
-  "description": "実行時の証跡。 画面・ログの取得と保管。",
+  "description": "実行時の証跡。 画面・ログの取得と保管、 遠隔プレイの行動ログ (オートプレイヤーの参考データ) の記録と取得。",
   "presetRules": [],
   "templateRules": [],
   "membership": [
     {
       "pathPattern": "(^|/)src/capture/(?:.*/)?[^/]+$"
+    },
+    {
+      "pathPattern": "(^|/)src/playlog/(?:.*/)?[^/]+$"
     }
   ]
 }

@@ -58,6 +58,8 @@ namespace Ludiars.Custos.Bridge
 #if ENABLE_INPUT_SYSTEM
             var injector = new Input.VirtualKeyboardInjector();
             injector.Initialize();
+            var pointerInjector = new Input.VirtualPointerInjector();
+            pointerInjector.Initialize();
 #endif
 
             // hidden GameObject (DontDestroyOnLoad + HideAndDontSave)
@@ -94,6 +96,9 @@ namespace Ludiars.Custos.Bridge
                 },
                 null);
 
+#if ENABLE_INPUT_SYSTEM
+            _server.OnPointer = (x, y, button, phase) => pointerInjector.InjectPointer(x, y, button, phase);
+#endif
             _server.Start();
 
             Application.quitting += () =>
@@ -101,6 +106,7 @@ namespace Ludiars.Custos.Bridge
                 _server?.Stop();
 #if ENABLE_INPUT_SYSTEM
                 injector.Shutdown();
+                pointerInjector.Shutdown();
 #endif
             };
         }
