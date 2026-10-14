@@ -7,7 +7,7 @@
 //   - 同期 GetContext() loop (スループット要件が低い単一クライアント前提)
 //   - /key は enqueue → 即 200 (fire-and-forget)
 //   - /screenshot は coalescing pending + ManualResetEventSlim でブロック (timeout 7s)
-//   - /stream は配信スレッドへそのまま渡す (ブロッキング)
+//   - /stream は専用スレッドに渡して accept loop を空ける (接続中ずっとブロックするため)
 //   - /pointer は enqueue → 即 200 (fire-and-forget、spec/feature/remote-play-and-play-log.md §1.1)
 //   - /state は main thread で CustosPlayState を取り、最大 500ms 待って返す
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -387,8 +387,19 @@ namespace Ludiars.Custos.Bridge
 
         private void HandleStream(HttpListenerContext ctx)
         {
-            // FrameStreamer がブロッキングで配信する
-            _streamer.StartStream(ctx);
+            // FrameStreamer は接続が続く間ずっとブロックして配信する。accept loop は 1 本なので、
+            // ここで直接呼ぶと配信中は Play / Stop / status / key / pointer が全て詰まる
+            // (Custos は VIEW を開いている間 /stream に常時つなぐ)。専用スレッドで配信する。
+            var thread = new Thread(() =>
+            {
+                try { _streamer.StartStream(ctx); }
+                catch (Exception e) { Debug.LogWarning($"[CustosBridge] /stream failed: {e.Message}"); }
+            })
+            {
+                IsBackground = true,
+                Name = "CustosBridge.Stream",
+            };
+            thread.Start();
         }
 
         // P0 only. SceneView capture is explicitly deferred until the P2 provider exists.

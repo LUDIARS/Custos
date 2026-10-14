@@ -42,6 +42,9 @@ namespace Ludiars.Custos.Bridge
         // 終了で取り込みを止めないよう、bool ではなく接続数で持つ。
         private int _activeStreams;
 
+        /// <summary>新しいフレームが来ないときに直前のフレームを送り直す間隔 (ms)。</summary>
+        private const int ResendIntervalMs = 1000;
+
         // ── IFrameStreamer ───────────────────────────────
 
         /// <summary>
@@ -143,6 +146,7 @@ namespace Ludiars.Custos.Bridge
             int intervalMs = Mathf.Max(1, 1000 / fps);
             var stream     = res.OutputStream;
             byte[] lastSent = null;
+            var sinceWrite = System.Diagnostics.Stopwatch.StartNew();
 
             Debug.Log($"[CustosBridge] /stream started: {w}x{h} @ {fps}fps");
 
@@ -166,6 +170,17 @@ namespace Ludiars.Custos.Bridge
                         stream.Write(frame, 0, frame.Length);
                         stream.Flush();
                         lastSent = frame;
+                        sinceWrite.Restart();
+                    }
+                    else if (lastSent != null && lastSent.Length == w * h * 4
+                        && sinceWrite.ElapsedMilliseconds >= ResendIntervalMs)
+                    {
+                        // 新しいフレームが来ない (Edit mode・一時停止) 間も直前のフレームを送り直す。
+                        // 書かないと相手の切断に気づけず、このスレッドが永遠に残る。受け手の
+                        // ffmpeg にも映像が途切れず届く。
+                        stream.Write(lastSent, 0, lastSent.Length);
+                        stream.Flush();
+                        sinceWrite.Restart();
                     }
 
                     Thread.Sleep(intervalMs);

@@ -93,6 +93,9 @@ const pad = createVirtualPad({
     sendKey,
     onAction: (action) => {
         if (action === "kill") apiAction("kill");
+        if (action === "screenshot") {
+            stream.snapshot().catch((err) => log(`[snapshot] error: ${err.message ?? err}`, true));
+        }
     },
     canOperate: () => control.canOperate(),
 });
