@@ -78,6 +78,20 @@ app に `audio: { "source": "process-loopback" }` を書くと、映像と同じ
 - 音声が取れなくても映像は流す。理由は `/rtc/offer` の `audioError` と RTC 診断に残し、ブラウザが LOG に出す。
 - ブラウザは音声の受信枠を `hasAudio` の app でだけ出す。自動再生の制限があるので消音で始め、VIEW の 🔇 / 🔊 で切り替える。
 
+### 3.2 外部からの接続 (STUN / TURN)
+
+画面・操作は Cloudflare Tunnel (HTTP / WebSocket) を通るが、WebRTC の映像と音声は Tunnel を通らず UDP で直接つながる。
+同じ LAN 以外からも届くよう、サーバー (werift) とブラウザの両方に同じ ICE サーバーを渡す (`src/capture/ice-servers.ts`、
+ブラウザは `GET /api/apps/_/rtc/ice-servers` で受け取る)。
+
+- STUN: 既定は Cloudflare の無料 STUN (`stun:stun.cloudflare.com:3478`)。`CUSTOS_STUN_URLS` (カンマ区切り) で変えられ、空文字で無効。
+  NAT の外側のアドレス (srflx) を候補に出し、多くの家庭・オフィスのルーターでは外からも直接つながる。
+- TURN: `CUSTOS_TURN_KEY_ID` と `CUSTOS_TURN_KEY_API_TOKEN` (Cloudflare Realtime の TURN キー、Excubitor の Vault で custos に渡す)
+  があるときだけ使う。直接つながらない回線 (携帯の CGNAT など) で中継する。認証情報は Cloudflare の API で 24 時間の期限付きで
+  発行し、期限の 1 時間前まで使い回す。片方だけの設定は起動時に止める。発行に失敗したら STUN だけで続け、理由をログに出す。
+  ブラウザが拒否する port 53 の TURN は除く。werift には UDP の TURN だけを渡す。
+- 料金の目安 (2026-08 時点): STUN は無料・無制限。TURN は毎月 1,000GB まで無料 (SFU と共通の枠)、以降 $0.05/GB (Cloudflare → 端末の分)。
+
 ## 4. 構成 (SRP)
 
 | ファイル | 責務 |
@@ -95,6 +109,7 @@ app に `audio: { "source": "process-loopback" }` を書くと、映像と同じ
 | `public/js/unity-panel.js` | Unity パネル |
 | `public/js/settings-panel.js` | SETTINGS |
 | `src/capture/shared-rtp-source.ts` | app ごとの映像源 / 音声源の共有 |
+| `src/capture/ice-servers.ts` | STUN / TURN の設定と TURN 認証情報の発行 |
 | `src/capture/audio-pipeline.ts` / `audio-source.ts` / `audio-target.ts` / `process-loopback.ts` | 音声の取り込み・変換・対象 PID・取り込みプログラムのビルド |
 | `src/input/control-lease.ts` / `src/routes/control-guard.ts` | 操作権 / REST の観戦ガード |
 

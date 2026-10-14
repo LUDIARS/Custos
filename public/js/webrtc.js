@@ -21,9 +21,11 @@
  *   withAudio のときは音声の受信枠も出す (サーバーが音声トラックを載せる)。
  */
 export async function connectWebRTC({ appId, videoEl, apiFetch, onLog, onState, withAudio = false }) {
-    const pc = new RTCPeerConnection({
-        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-    });
+    // STUN / TURN はサーバーと同じものを使う (src/capture/ice-servers.ts)。
+    const iceRes = await apiFetch("/apps/_/rtc/ice-servers");
+    if (!iceRes.ok) throw new Error(`ice-servers HTTP ${iceRes.status}`);
+    const { iceServers } = await iceRes.json();
+    const pc = new RTCPeerConnection({ iceServers });
 
     // 受信側 transceiver。サーバーが video (と audio) track を流し込む。
     pc.addTransceiver("video", { direction: "recvonly" });

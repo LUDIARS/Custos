@@ -23,6 +23,7 @@ import { attachWebSocketBroker } from "./ws/handler.js";
 import { ControlLease } from "./input/control-lease.js";
 import { createVideoSourcePool } from "./capture/shared-rtp-source.js";
 import { createAudioSourcePool } from "./capture/audio-source.js";
+import { IceServerProvider } from "./capture/ice-servers.js";
 import { WebRTCBroker } from "./capture/webrtc-broker.js";
 import { ScreenshotStreamer } from "./capture/screenshot-stream.js";
 import { RuntimeStreamPrefs } from "./runtime/stream-prefs.js";
@@ -72,6 +73,7 @@ async function main() {
     const broker   = new WebRTCBroker(
         createVideoSourcePool(),
         createAudioSourcePool({ getRunPid: (appId) => runner.getRunPid(appId) }),
+        new IceServerProvider(),
     );
     // 操作権は全ポートの WS broker と REST で 1 つを共有する (どちらのポートから繋いでも同じ player)。
     const control  = new ControlLease();

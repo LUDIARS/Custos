@@ -94,6 +94,10 @@ export function createRtcRoutes({ registry, broker }: RtcRoutesDeps) {
         return c.json({ ok });
     });
 
+    /// GET /api/apps/_/rtc/ice-servers
+    /// ブラウザが RTCPeerConnection に渡す STUN / TURN。サーバー (werift) と同じものを返す。
+    r.get("/_/rtc/ice-servers", async (c) => c.json({ iceServers: await broker.iceServers() }));
+
     /// GET /api/apps/_/rtc/diagnostic
     /// 直近 10 セッションぶんの WebRTC 診断情報を返す。映像が出ない原因の
     /// 切り分けに使う (ffmpeg stderr / pc 状態遷移 / RTP 受信数 / SDP 行数)。

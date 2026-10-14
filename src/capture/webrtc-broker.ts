@@ -22,6 +22,7 @@ import type { AppConfig } from "../config/apps-config.js";
 import { createVideoSourcePool, type SharedRtpSourcePool, type VideoPipeline } from "./shared-rtp-source.js";
 import type { AudioSourcePipeline } from "./audio-source.js";
 import { OPUS_PAYLOAD_TYPE } from "./audio-pipeline.js";
+import { IceServerProvider, toWeriftIceServers, type IceServer } from "./ice-servers.js";
 
 const log = childLogger("webrtc-broker");
 
@@ -123,12 +124,19 @@ export class WebRTCBroker extends EventEmitter {
     /**
      * @param sources      映像源のプール
      * @param audioSources 音声源のプール。null なら音声を扱わない (audio 設定のある app でも映像だけ)
+     * @param ice          STUN / TURN。ブラウザにも同じものを渡す (iceServers())
      */
     constructor(
         private readonly sources: SharedRtpSourcePool<VideoPipeline> = createVideoSourcePool(),
         private readonly audioSources: SharedRtpSourcePool<AudioSourcePipeline> | null = null,
+        private readonly ice: IceServerProvider = new IceServerProvider(),
     ) {
         super();
+    }
+
+    /** ブラウザが RTCPeerConnection に渡す ICE サーバー (サーバー側と同じ STUN / TURN)。 */
+    iceServers(): Promise<IceServer[]> {
+        return this.ice.get();
     }
 
     /** werift が使えるか + capture 設定があるかの事前チェック。 */
@@ -177,8 +185,10 @@ export class WebRTCBroker extends EventEmitter {
             parameters:  "minptime=10;useinbandfec=1",
         }) : null;
 
+        // STUN で NAT の外側のアドレスも候補に出す (同じ LAN にいないブラウザとも直接つながるように)。
         const pc = new w.RTCPeerConnection({
             codecs: opus ? { video: [h264], audio: [opus] } : { video: [h264] },
+            iceServers: toWeriftIceServers(await this.ice.get()),
         });
 
         // codec を track にも紐付けると writeRtp が payloadType=96 に rewrite する。
