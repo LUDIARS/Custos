@@ -8,7 +8,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { EventEmitter } from "node:events";
 import dgram from "node:dgram";
 import type { AppConfig } from "../src/config/apps-config.js";
-import { SharedRtpSourcePool, type RtpSink, type VideoPipeline } from "../src/capture/shared-rtp-source.js";
+import { createVideoSourcePool, type RtpSink, type SharedRtpSourcePool, type VideoPipeline } from "../src/capture/shared-rtp-source.js";
 
 class FakePipeline extends EventEmitter implements VideoPipeline {
     started = 0;
@@ -62,9 +62,9 @@ async function waitFor(check: () => boolean, timeoutMs = 2000): Promise<void> {
     }
 }
 
-const pools: SharedRtpSourcePool[] = [];
-function newPool(pipelines: FakePipeline[]): SharedRtpSourcePool {
-    const pool = new SharedRtpSourcePool({
+const pools: SharedRtpSourcePool<VideoPipeline>[] = [];
+function newPool(pipelines: FakePipeline[]): SharedRtpSourcePool<VideoPipeline> {
+    const pool = createVideoSourcePool({
         createPipeline: () => {
             const p = new FakePipeline();
             pipelines.push(p);
@@ -144,7 +144,7 @@ describe("SharedRtpSourcePool", () => {
     });
 
     test("起動に失敗したら acquire は reject し、映像源は残らない", async () => {
-        const pool = new SharedRtpSourcePool({
+        const pool = createVideoSourcePool({
             createPipeline: () => {
                 const p = new FakePipeline();
                 p.start = () => { throw new Error("ffmpeg missing"); };
@@ -157,7 +157,7 @@ describe("SharedRtpSourcePool", () => {
     });
 
     test("ffmpeg を起動できなければ acquire は理由付きで reject し、映像源は残らない", async () => {
-        const pool = new SharedRtpSourcePool({
+        const pool = createVideoSourcePool({
             createPipeline: () => {
                 const p = new FakePipeline();
                 p.start = () => { setImmediate(() => p.emit("error", new Error("spawn ffmpeg ENOENT"))); };
@@ -165,7 +165,7 @@ describe("SharedRtpSourcePool", () => {
             },
         });
         pools.push(pool);
-        await expect(pool.acquire(captureApp(), "a", recordingSink())).rejects.toThrow(/ffmpeg を起動できません.*ENOENT/);
+        await expect(pool.acquire(captureApp(), "a", recordingSink())).rejects.toThrow(/video のパイプラインを起動できません.*ENOENT/);
         expect(pool.subscriberCount("demo")).toBe(0);
     });
 

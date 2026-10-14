@@ -13,7 +13,7 @@ const RETRY_BASE_MS = 2_000;
 const RETRY_MAX_MS = 30_000;
 
 export function createStreamView({ elements, apiFetch, log }) {
-    const { video, image, placeholder, placeholderTitle, placeholderHint, status } = elements;
+    const { video, image, placeholder, placeholderTitle, placeholderHint, status, audioToggle } = elements;
     let app = null;
     let sessionId = null;
     /** 接続の世代。古い接続から遅れて届いた状態変化を無視するために使う。 */
@@ -25,10 +25,24 @@ export function createStreamView({ elements, apiFetch, log }) {
     video.addEventListener("playing", () => {
         if (sessionId) showVideo();
     });
+    // ブラウザは音の自動再生を止めるので、消音で始めてボタン (ユーザ操作) で音を出す。
+    audioToggle.addEventListener("click", () => {
+        video.muted = !video.muted;
+        if (!video.muted) video.play().catch(() => { /* 再生は playing で拾う。止められても映像は出ている */ });
+        renderAudioToggle();
+    });
+
+    function renderAudioToggle() {
+        audioToggle.hidden = !app?.hasAudio;
+        audioToggle.textContent = video.muted ? "🔇" : "🔊";
+        audioToggle.title = video.muted ? "音を出す" : "消音にする";
+    }
 
     async function setApp(config) {
         stop();
         app = config;
+        video.muted = true;
+        renderAudioToggle();
         if (!config) {
             showPlaceholder("No app selected", "上のセレクタからアプリを選ぶと映像につながります。");
             return;
@@ -52,6 +66,7 @@ export function createStreamView({ elements, apiFetch, log }) {
                 apiFetch,
                 onLog: (text, isError) => log(`[video] ${text}`, isError),
                 onState: (state) => onState(gen, state),
+                withAudio: app.hasAudio === true,
             });
             if (gen !== generation) {
                 // 接続中に app が切り替わった。つながった方を捨てる。

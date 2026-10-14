@@ -248,8 +248,10 @@ namespace Ludiars.Custos.Bridge
                 gate.Set();
             });
             gate.Wait(500);
+            // pid は Custos が音声 (Application Loopback) の取り込み先を決めるのに使う。
+            int pid = System.Diagnostics.Process.GetCurrentProcess().Id;
             HttpJson.WriteJson(res, 200,
-                $"{{\"status\":\"ok\",\"isPlaying\":{(isPlaying ? "true" : "false")}}}");
+                $"{{\"status\":\"ok\",\"isPlaying\":{(isPlaying ? "true" : "false")},\"pid\":{pid}}}");
         }
 
         // ── /screenshot ──────────────────────────────────

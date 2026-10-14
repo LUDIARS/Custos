@@ -141,6 +141,15 @@ const playLogSchema = z.object({
     idleStopSec: z.number().int().min(10).max(86_400).default(300),
 });
 
+/**
+ * 音声の配信 (spec/feature/floating-ui-and-shared-video.md §3.1)。
+ * process-loopback: 対象プロセス (Unity Editor やゲーム) が鳴らす音だけを Windows の
+ * Application Loopback で取る。対象の PID は inAppBridge の /health、無ければ Custos が起動した run から取る。
+ */
+const audioSchema = z.object({
+    source: z.literal("process-loopback"),
+});
+
 export const appConfigSchema = z.object({
     id:    z.string().regex(/^[a-z0-9][a-z0-9-]*$/i, "id は英数字 + ハイフン"),
     name:  z.string().min(1),
@@ -164,6 +173,8 @@ export const appConfigSchema = z.object({
     logs:    logsSchema.default({ stdout: true, stderr: true, files: [] }),
     /** 行動ログ (spec/feature/remote-play-and-play-log.md §2)。無ければ記録しない。 */
     playLog: playLogSchema.optional(),
+    /** 音声の配信。無ければ映像だけを流す。 */
+    audio:   audioSchema.optional(),
 }).transform((v) => {
     // ergoCustos (deprecated alias) を inAppBridge {kind:"ergo"} に正規化する。
     // inAppBridge が明示されていれば ergoCustos は無視 (inAppBridge 優先)。

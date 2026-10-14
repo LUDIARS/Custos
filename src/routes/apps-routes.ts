@@ -106,6 +106,8 @@ export function redact(cfg: import("../config/apps-config.js").AppConfig) {
         // WebRTC の映像源 (デスクトップキャプチャかアプリ内ブリッジ) があるか。VIEW はこれが
         // true の app を選んだ時点で自動接続する。
         hasVideo:    Boolean(cfg.capture || cfg.inAppBridge),
+        // 音声トラックを WebRTC に載せるか。ブラウザはこれが true のときだけ音声を受け取る。
+        hasAudio:    Boolean(cfg.audio),
         capture:     cfg.capture
             ? { type: cfg.capture.type, fps: cfg.capture.fps }
             : null,

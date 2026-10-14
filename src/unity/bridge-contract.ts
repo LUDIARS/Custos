@@ -16,6 +16,8 @@ export const BRIDGE_PORT_SCAN_COUNT = 11;
 export interface BridgeHealth {
     status: string;
     isPlaying: boolean;
+    /** ブリッジが動いているプロセス (Unity) の PID。古いブリッジは返さない。 */
+    pid?: number;
 }
 
 export interface BridgeStatus {

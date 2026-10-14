@@ -77,8 +77,9 @@ export function createRtcRoutes({ registry, broker }: RtcRoutesDeps) {
         if (!body.sdp) return c.json({ error: "sdp required" }, 400);
 
         try {
-            const { sessionId, answer } = await broker.createSession(cfg, body.sdp);
-            return c.json({ ok: true, sessionId, sdp: answer.sdp, type: answer.type });
+            const { sessionId, answer, audioError } = await broker.createSession(cfg, body.sdp);
+            // audioError: 音声だけ載せられなかった理由 (映像は流れる)。ブラウザが LOG に出す。
+            return c.json({ ok: true, sessionId, sdp: answer.sdp, type: answer.type, ...(audioError ? { audioError } : {}) });
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             return c.json({ ok: false, error: msg }, 500);

@@ -21,6 +21,8 @@ import { AppsRunner }     from "./apps/runner.js";
 import { buildApp }       from "./app.js";
 import { attachWebSocketBroker } from "./ws/handler.js";
 import { ControlLease } from "./input/control-lease.js";
+import { createVideoSourcePool } from "./capture/shared-rtp-source.js";
+import { createAudioSourcePool } from "./capture/audio-source.js";
 import { WebRTCBroker } from "./capture/webrtc-broker.js";
 import { ScreenshotStreamer } from "./capture/screenshot-stream.js";
 import { RuntimeStreamPrefs } from "./runtime/stream-prefs.js";
@@ -66,7 +68,11 @@ async function main() {
 
     const registry = new AppsRegistry(cfg.apps);
     const runner   = new AppsRunner(registry);
-    const broker   = new WebRTCBroker();
+    // 映像源と音声源は app ごとに 1 本を全 session で共有する (spec/feature/floating-ui-and-shared-video.md §3)。
+    const broker   = new WebRTCBroker(
+        createVideoSourcePool(),
+        createAudioSourcePool({ getRunPid: (appId) => runner.getRunPid(appId) }),
+    );
     // 操作権は全ポートの WS broker と REST で 1 つを共有する (どちらのポートから繋いでも同じ player)。
     const control  = new ControlLease();
     const prefs    = new RuntimeStreamPrefs();

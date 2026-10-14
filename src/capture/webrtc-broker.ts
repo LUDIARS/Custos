@@ -19,7 +19,9 @@ import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { childLogger } from "../shared/logger.js";
 import type { AppConfig } from "../config/apps-config.js";
-import { SharedRtpSourcePool } from "./shared-rtp-source.js";
+import { createVideoSourcePool, type SharedRtpSourcePool, type VideoPipeline } from "./shared-rtp-source.js";
+import type { AudioSourcePipeline } from "./audio-source.js";
+import { OPUS_PAYLOAD_TYPE } from "./audio-pipeline.js";
 
 const log = childLogger("webrtc-broker");
 
@@ -36,6 +38,10 @@ interface SessionDiag {
     iceStates:       string[];
     ffmpegStderr:    readonly string[];
     answerSdpLines:  number;
+    /** 音声トラックに流した RTP の数 (音声が無い app・offer では 0)。 */
+    audioRtpReceived: number;
+    /** 音声を載せられなかった理由。映像は流し続ける。 */
+    audioError?:     string;
 }
 const DIAG_HISTORY_MAX = 10;
 const diagHistory: SessionDiag[] = [];
@@ -48,6 +54,7 @@ interface RTCRtpCodecParametersLike {
     new (props: {
         mimeType:    string;
         clockRate:   number;
+        channels?:   number;
         payloadType: number;
         rtcpFeedback?: { type: string; parameter?: string }[];
         parameters?:  string;
@@ -113,7 +120,14 @@ export interface BrokerEvents {
 export class WebRTCBroker extends EventEmitter {
     private sessions = new Map<string, CaptureSession>();
 
-    constructor(private readonly sources: SharedRtpSourcePool = new SharedRtpSourcePool()) {
+    /**
+     * @param sources      映像源のプール
+     * @param audioSources 音声源のプール。null なら音声を扱わない (audio 設定のある app でも映像だけ)
+     */
+    constructor(
+        private readonly sources: SharedRtpSourcePool<VideoPipeline> = createVideoSourcePool(),
+        private readonly audioSources: SharedRtpSourcePool<AudioSourcePipeline> | null = null,
+    ) {
         super();
     }
 
@@ -131,7 +145,7 @@ export class WebRTCBroker extends EventEmitter {
      *     bridge の `GET /stream` に接続して raw BGRA8 を ffmpeg stdin に流す。
      *   - それ以外 (`app.capture` のみ) は従来の gdigrab/x11grab source。
      */
-    async createSession(app: AppConfig, offerSdp: string): Promise<{ sessionId: string; answer: { sdp: string; type: string } }> {
+    async createSession(app: AppConfig, offerSdp: string): Promise<{ sessionId: string; answer: { sdp: string; type: string }; audioError?: string }> {
         if (!app.capture && !app.inAppBridge) {
             throw new Error(`app ${app.id} has neither capture nor inAppBridge config`);
         }
@@ -153,20 +167,32 @@ export class WebRTCBroker extends EventEmitter {
             ],
         });
 
+        // 音声はブラウザが音声の受信枠 (m=audio) を出したときだけ載せる (音声の無い app では出さない)。
+        const audioSources = app.audio && offerSdp.includes("m=audio") ? this.audioSources : null;
+        const opus = audioSources ? new w.RTCRtpCodecParameters({
+            mimeType:    "audio/opus",
+            clockRate:   48000,
+            channels:    2,
+            payloadType: OPUS_PAYLOAD_TYPE,
+            parameters:  "minptime=10;useinbandfec=1",
+        }) : null;
+
         const pc = new w.RTCPeerConnection({
-            codecs: { video: [h264] },
+            codecs: opus ? { video: [h264], audio: [opus] } : { video: [h264] },
         });
 
         // codec を track にも紐付けると writeRtp が payloadType=96 に rewrite する。
         const track = new w.MediaStreamTrack({ kind: "video", codec: h264 });
         pc.addTransceiver(track, { direction: "sendonly" });
+        const audioTrack = opus ? new w.MediaStreamTrack({ kind: "audio", codec: opus }) : null;
+        if (audioTrack) pc.addTransceiver(audioTrack, { direction: "sendonly" });
 
         const sessionId = randomUUID();
         const diag: SessionDiag = {
             sessionId, appId: app.id, createdAt: Date.now(),
             rtpPort: 0, rtpReceived: 0,
             pcStates: [], iceStates: [], ffmpegStderr: [],
-            answerSdpLines: 0,
+            answerSdpLines: 0, audioRtpReceived: 0,
         };
 
         let rtpReceived = 0;
@@ -246,7 +272,28 @@ export class WebRTCBroker extends EventEmitter {
             throw err;
         }
         diag.ffmpegStderr = this.sources.stderrTail(app.id);
-        log.info({ sessionId, appId: app.id, subscribers: this.sources.subscriberCount(app.id) },
+
+        // ── 音声源の購読 ─────────────────────────────────────────
+        // 音声が取れなくても映像は流す。理由は診断と応答 (audioError) に残し、ブラウザが LOG に出す。
+        if (audioSources && audioTrack) {
+            try {
+                await audioSources.acquire(app, sessionId, {
+                    onPacket: (msg: Buffer) => {
+                        try {
+                            audioTrack.writeRtp(msg);
+                            diag.audioRtpReceived++;
+                        } catch (err) {
+                            log.warn({ err: err instanceof Error ? err.message : String(err), sessionId }, "audio writeRtp failed");
+                        }
+                    },
+                    onEnd: () => log.warn({ sessionId, appId: app.id }, "audio source ended — video keeps streaming"),
+                });
+            } catch (err) {
+                diag.audioError = err instanceof Error ? err.message : String(err);
+                log.warn({ sessionId, appId: app.id, err: diag.audioError }, "audio unavailable — streaming video only");
+            }
+        }
+        log.info({ sessionId, appId: app.id, subscribers: this.sources.subscriberCount(app.id), audio: Boolean(audioSources) && !diag.audioError },
                  "capture session opened");
 
         const session: CaptureSession = {
@@ -271,7 +318,9 @@ export class WebRTCBroker extends EventEmitter {
             }
         }, 5000);
 
-        return { sessionId, answer: finalAnswer };
+        return diag.audioError
+            ? { sessionId, answer: finalAnswer, audioError: diag.audioError }
+            : { sessionId, answer: finalAnswer };
     }
 
     closeSession(sessionId: string): boolean {
@@ -280,6 +329,7 @@ export class WebRTCBroker extends EventEmitter {
         // 先に map から外す。pc.close() が connectionstatechange 経由で再入しても二重に閉じない。
         this.sessions.delete(sessionId);
         this.sources.release(s.appId, sessionId);
+        this.audioSources?.release(s.appId, sessionId);
         try { s.pc.close(); } catch { /* 既に閉じていることがある。後始末なので best-effort */ }
         s.diag.closedAt = Date.now();
         this.emit("session-closed", sessionId);
@@ -302,6 +352,7 @@ export class WebRTCBroker extends EventEmitter {
     shutdown(): void {
         for (const sid of [...this.sessions.keys()]) this.closeSession(sid);
         this.sources.shutdown();
+        this.audioSources?.shutdown();
     }
 }
 

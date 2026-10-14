@@ -1,5 +1,7 @@
 /**
- * app ごとに 1 本の映像源 (ffmpeg → RTP) を持ち、同じ RTP を複数の WebRTC session に配る。
+ * app ごとに 1 本の映像源 / 音声源 (→ RTP) を持ち、同じ RTP を複数の WebRTC session に配る。
+ * 映像 (createVideoSourcePool) と音声 (createAudioSourcePool、audio-source.ts) で同じ仕組みを使い、
+ * 違うのは「何を起動するか」(launch) だけ。
  *
  * 観戦者が増えるたびに ffmpeg を起動すると、同じ画面を何本もエンコードすることになる
  * (bridge-stream ではアプリ側の /stream 接続も増える)。最初の購読で起動し、最後の購読
@@ -24,22 +26,59 @@ export interface RtpSink {
     onEnd:    () => void;
 }
 
-/** FfmpegPipeline のうち、映像源の管理に使う部分。テストで差し替える。 */
-export interface VideoPipeline extends Pick<EventEmitter, "on"> {
-    start(app: AppConfig, opts: FfmpegStartOptions): void;
-    startBridgeStream(bridge: NonNullable<AppConfig["inAppBridge"]>, opts: FfmpegStartOptions): Promise<unknown>;
+/**
+ * RTP を送るパイプラインの共通契約。起動できたら "spawn"、失敗・異常は "error"、
+ * 終了は "exit"、診断行は "stderr" を出す (FfmpegPipeline / AudioPipeline)。
+ */
+export interface RtpPipeline extends Pick<EventEmitter, "on"> {
     stop(): void;
 }
 
-export interface SharedRtpSourceDeps {
-    createPipeline?: () => VideoPipeline;
-    createSocket?:   () => DgramSocket;
+/** FfmpegPipeline のうち、映像源の管理に使う部分。テストで差し替える。 */
+export interface VideoPipeline extends RtpPipeline {
+    start(app: AppConfig, opts: FfmpegStartOptions): void;
+    startBridgeStream(bridge: NonNullable<AppConfig["inAppBridge"]>, opts: FfmpegStartOptions): Promise<unknown>;
 }
 
-interface Source {
+/** パイプラインを起動する。起動の成否 ("spawn" / "error") はプールが待つので、ここは起動要求まで。 */
+export type RtpLauncher<P extends RtpPipeline> = (app: AppConfig, pipeline: P, opts: { rtpPort: number }) => Promise<void>;
+
+export interface SharedRtpSourceDeps<P extends RtpPipeline> {
+    createPipeline: () => P;
+    launch:         RtpLauncher<P>;
+    createSocket?:  () => DgramSocket;
+    /** ログ・エラーに出す種類名 ("video" / "audio")。 */
+    kind?:          string;
+}
+
+/** 映像源のプール。既定は FfmpegPipeline (bridge-stream かデスクトップキャプチャ)。 */
+export function createVideoSourcePool(
+    deps: Partial<SharedRtpSourceDeps<VideoPipeline>> = {},
+): SharedRtpSourcePool<VideoPipeline> {
+    return new SharedRtpSourcePool<VideoPipeline>({
+        createPipeline: deps.createPipeline ?? (() => new FfmpegPipeline()),
+        launch:         deps.launch ?? launchVideo,
+        kind:           "video",
+        ...(deps.createSocket ? { createSocket: deps.createSocket } : {}),
+    });
+}
+
+async function launchVideo(app: AppConfig, pipeline: VideoPipeline, opts: { rtpPort: number }): Promise<void> {
+    if (app.inAppBridge) {
+        const meta = await pipeline.startBridgeStream(app.inAppBridge, opts);
+        log.info({ appId: app.id, meta, rtpPort: opts.rtpPort }, "video source starting (bridge-stream)");
+    } else if (app.capture) {
+        pipeline.start(app, opts);
+        log.info({ appId: app.id, rtpPort: opts.rtpPort }, "video source starting (desktop capture)");
+    } else {
+        throw new Error(`app ${app.id} has neither capture nor inAppBridge config`);
+    }
+}
+
+interface Source<P extends RtpPipeline> {
     appId:      string;
     udp:        DgramSocket;
-    pipeline:   VideoPipeline;
+    pipeline:   P;
     rtpPort:    number;
     sinks:      Map<string, RtpSink>;
     stderrTail: string[];
@@ -47,14 +86,18 @@ interface Source {
     closed:     boolean;
 }
 
-export class SharedRtpSourcePool {
-    private readonly sources = new Map<string, Source>();
-    private readonly createPipeline: () => VideoPipeline;
+export class SharedRtpSourcePool<P extends RtpPipeline> {
+    private readonly sources = new Map<string, Source<P>>();
+    private readonly createPipeline: () => P;
+    private readonly launch:         RtpLauncher<P>;
     private readonly createSocket:   () => DgramSocket;
+    private readonly kind:           string;
 
-    constructor(deps: SharedRtpSourceDeps = {}) {
-        this.createPipeline = deps.createPipeline ?? (() => new FfmpegPipeline());
-        this.createSocket   = deps.createSocket   ?? (() => dgram.createSocket("udp4"));
+    constructor(deps: SharedRtpSourceDeps<P>) {
+        this.createPipeline = deps.createPipeline;
+        this.launch         = deps.launch;
+        this.createSocket   = deps.createSocket ?? (() => dgram.createSocket("udp4"));
+        this.kind           = deps.kind ?? "rtp";
     }
 
     /**
@@ -62,9 +105,6 @@ export class SharedRtpSourcePool {
      * 戻り値は ffmpeg が RTP を送っている loopback の UDP ポート (診断用)。
      */
     async acquire(app: AppConfig, subscriberId: string, sink: RtpSink): Promise<number> {
-        if (!app.capture && !app.inAppBridge) {
-            throw new Error(`app ${app.id} has neither capture nor inAppBridge config`);
-        }
         let source = this.sources.get(app.id);
         if (!source) {
             source = this.open(app);
@@ -79,7 +119,7 @@ export class SharedRtpSourcePool {
         }
         if (source.closed || !source.sinks.has(subscriberId)) {
             source.sinks.delete(subscriberId);
-            throw new Error(`video source for ${app.id} ended while starting`);
+            throw new Error(`${this.kind} source for ${app.id} ended while starting`);
         }
         return source.rtpPort;
     }
@@ -113,8 +153,8 @@ export class SharedRtpSourcePool {
         for (const source of [...this.sources.values()]) this.teardown(source, true);
     }
 
-    private open(app: AppConfig): Source {
-        const source: Source = {
+    private open(app: AppConfig): Source<P> {
+        const source: Source<P> = {
             appId:      app.id,
             udp:        this.createSocket(),
             pipeline:   this.createPipeline(),
@@ -131,7 +171,7 @@ export class SharedRtpSourcePool {
         return source;
     }
 
-    private async start(app: AppConfig, source: Source): Promise<void> {
+    private async start(app: AppConfig, source: Source<P>): Promise<void> {
         source.rtpPort = await bindLoopback(source.udp);
         source.udp.on("message", (packet: Buffer) => {
             for (const [subscriberId, sink] of source.sinks) {
@@ -146,29 +186,23 @@ export class SharedRtpSourcePool {
             log.warn({ err: err.message, appId: source.appId }, "udp socket error");
         });
         source.pipeline.on("exit", () => this.teardown(source, true));
-        source.pipeline.on("error", (err: Error) => log.warn({ err, appId: source.appId }, "ffmpeg pipeline error"));
+        source.pipeline.on("error", (err: Error) => log.warn({ err, appId: source.appId, kind: this.kind }, "pipeline error"));
         source.pipeline.on("stderr", (line: string) => {
             source.stderrTail.push(line);
             if (source.stderrTail.length > STDERR_TAIL_MAX) source.stderrTail.shift();
         });
 
-        const opts = { rtpPort: source.rtpPort };
         // spawn の成否は起動直後に非同期で決まる。先に待ち受けてから起動する。
-        const spawned = waitForSpawn(source.pipeline);
-        if (app.inAppBridge) {
-            const meta = await source.pipeline.startBridgeStream(app.inAppBridge, opts);
-            await spawned;
-            log.info({ appId: app.id, meta, rtpPort: source.rtpPort }, "video source opened (bridge-stream)");
-        } else {
-            source.pipeline.start(app, opts);
-            await spawned;
-            log.info({ appId: app.id, rtpPort: source.rtpPort }, "video source opened (desktop capture)");
-        }
-        // 起動後に落ちた (spawn 後の error) ときも、映像の来ない session を残さない。
+        const spawned = waitForSpawn(source.pipeline, this.kind);
+        spawned.catch(() => { /* launch が先に失敗したときの未処理 reject を防ぐ。結果は下で await する */ });
+        await this.launch(app, source.pipeline, { rtpPort: source.rtpPort });
+        await spawned;
+        log.info({ appId: app.id, kind: this.kind, rtpPort: source.rtpPort }, "source opened");
+        // 起動後に落ちた (spawn 後の error) ときも、RTP の来ない session を残さない。
         source.pipeline.on("error", () => this.teardown(source, true));
     }
 
-    private teardown(source: Source, notify: boolean): void {
+    private teardown(source: Source<P>, notify: boolean): void {
         if (source.closed) return;
         source.closed = true;
         if (this.sources.get(source.appId) === source) this.sources.delete(source.appId);
@@ -176,20 +210,21 @@ export class SharedRtpSourcePool {
         try { source.udp.close(); } catch { /* bind 前の失敗では未オープン。後始末なので best-effort */ }
         const sinks = [...source.sinks.values()];
         source.sinks.clear();
-        log.info({ appId: source.appId, subscribers: sinks.length }, "video source closed");
+        log.info({ appId: source.appId, kind: this.kind, subscribers: sinks.length }, "source closed");
         if (notify) for (const sink of sinks) sink.onEnd();
     }
 }
 
 /**
- * ffmpeg が起動できたかを待つ。起動できなければ (未インストール・CUSTOS_FFMPEG の誤り)、
- * 映像が永遠に来ない session を作らず、接続要求をその理由で失敗させる。
+ * パイプライン (ffmpeg など) が起動できたかを待つ。起動できなければ (未インストール・
+ * CUSTOS_FFMPEG の誤り・取り込みプログラムの失敗)、RTP が永遠に来ない session を作らず、
+ * 接続要求をその理由で失敗させる。
  */
-function waitForSpawn(pipeline: VideoPipeline): Promise<void> {
+function waitForSpawn(pipeline: RtpPipeline, kind: string): Promise<void> {
     return new Promise((resolve, reject) => {
         pipeline.on("spawn", () => resolve());
         pipeline.on("error", (err: Error) => reject(new Error(
-            `ffmpeg を起動できません (${err.message})。ffmpeg を PATH に入れるか CUSTOS_FFMPEG で実行ファイルを指定してください`,
+            `${kind} のパイプラインを起動できません (${err.message})。ffmpeg は PATH に入れるか CUSTOS_FFMPEG で実行ファイルを指定してください`,
         )));
     });
 }

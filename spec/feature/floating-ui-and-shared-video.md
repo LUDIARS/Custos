@@ -58,6 +58,21 @@ RTP datagram を購読中の全 WebRTC session に配る。
 - Unity ブリッジの `/stream` は、最初のフレームを待つ間から「接続中」として数える (`FrameStreamer`)。Editor / Player の
   フレーム取り込みは接続中のときだけ動くため、フレームが届いてから数えると最初のフレームが作られず必ず 503 になっていた。
 
+### 3.1 音声 (process-loopback)
+
+app に `audio: { "source": "process-loopback" }` を書くと、映像と同じ WebRTC 接続に Opus の音声トラックを載せる。
+
+- 取り込み: Windows 10 2004 以降の Application Loopback で、対象プロセス (と子プロセス) が鳴らす音だけを取る
+  (`src/capture/process-loopback/ProcessLoopback.cs`)。CRI ADX のように Unity の AudioListener を通らない音も取れ、
+  他のアプリの音や通知音は入らない。C# のソースを Windows 標準の csc.exe で初回にビルドし、OS の一時ディレクトリに
+  ソースのハッシュ付きで置く (`src/capture/process-loopback.ts`)。
+- 対象の PID: inAppBridge の `/health` が返す `pid` (Excubitor が起動した Unity Editor でも取れる)。ブリッジが無い app は
+  Custos が起動した run の PID (`src/capture/audio-target.ts`)。取れなければ理由付きで失敗する。
+- 配信: PCM (s16le / 48kHz / 2ch) → ffmpeg (libopus 96kbps、20ms) → RTP (pt 111)。映像と同じく app ごとに 1 本を共有する
+  (`createAudioSourcePool`)。対象が鳴らしていない間は API がパケットを出さないので、実時間に合わせて無音を埋める。
+- 音声が取れなくても映像は流す。理由は `/rtc/offer` の `audioError` と RTC 診断に残し、ブラウザが LOG に出す。
+- ブラウザは音声の受信枠を `hasAudio` の app でだけ出す。自動再生の制限があるので消音で始め、VIEW の 🔇 / 🔊 で切り替える。
+
 ## 4. 構成 (SRP)
 
 | ファイル | 責務 |
@@ -74,7 +89,8 @@ RTP datagram を購読中の全 WebRTC session に配る。
 | `public/js/play-input.js` (+ `play-input-logic.js`) | 映像上のマウス / タッチ / キーボード |
 | `public/js/unity-panel.js` | Unity パネル |
 | `public/js/settings-panel.js` | SETTINGS |
-| `src/capture/shared-rtp-source.ts` | app ごとの映像源の共有 |
+| `src/capture/shared-rtp-source.ts` | app ごとの映像源 / 音声源の共有 |
+| `src/capture/audio-pipeline.ts` / `audio-source.ts` / `audio-target.ts` / `process-loopback.ts` | 音声の取り込み・変換・対象 PID・取り込みプログラムのビルド |
 | `src/input/control-lease.ts` / `src/routes/control-guard.ts` | 操作権 / REST の観戦ガード |
 
 ## 5. 受け入れ条件

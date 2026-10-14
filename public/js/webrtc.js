@@ -16,21 +16,25 @@
  *   apiFetch: Function,
  *   onLog?: (text: string, isError?: boolean) => void,
  *   onState?: (state: RTCPeerConnectionState) => void,
- * }} opts onState は接続状態が変わるたびに呼ばれる (切断の検知と再接続に使う)
+ *   withAudio?: boolean,
+ * }} opts onState は接続状態が変わるたびに呼ばれる (切断の検知と再接続に使う)。
+ *   withAudio のときは音声の受信枠も出す (サーバーが音声トラックを載せる)。
  */
-export async function connectWebRTC({ appId, videoEl, apiFetch, onLog, onState }) {
+export async function connectWebRTC({ appId, videoEl, apiFetch, onLog, onState, withAudio = false }) {
     const pc = new RTCPeerConnection({
         iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
 
-    // 受信側 transceiver。サーバーが video track を流し込む。
+    // 受信側 transceiver。サーバーが video (と audio) track を流し込む。
     pc.addTransceiver("video", { direction: "recvonly" });
+    if (withAudio) pc.addTransceiver("audio", { direction: "recvonly" });
 
+    // 映像と音声は別々の track として届くので、1 つの MediaStream にまとめて <video> に渡す。
+    const remote = new MediaStream();
+    videoEl.srcObject = remote;
     pc.ontrack = (ev) => {
-        if (videoEl.srcObject !== ev.streams[0]) {
-            videoEl.srcObject = ev.streams[0];
-            onLog?.("video track attached");
-        }
+        remote.addTrack(ev.track);
+        onLog?.(`${ev.track.kind} track attached`);
     };
     pc.onconnectionstatechange = () => {
         onLog?.(`pc state: ${pc.connectionState}`,
@@ -54,6 +58,7 @@ export async function connectWebRTC({ appId, videoEl, apiFetch, onLog, onState }
     }
     await pc.setRemoteDescription({ sdp: json.sdp, type: json.type ?? "answer" });
     onLog?.(`session ${json.sessionId} established`);
+    if (json.audioError) onLog?.(`audio unavailable: ${json.audioError}`, true);
 
     // 後で close 時に呼ぶよう PC をセッションに紐付け。
     sessions.set(json.sessionId, { pc });

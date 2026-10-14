@@ -67,6 +67,7 @@ const stream = createStreamView({
         placeholderTitle: $("streamPlaceholderTitle"),
         placeholderHint: $("streamPlaceholderHint"),
         status: $("rtcStatus"),
+        audioToggle: $("btnAudio"),
     },
     apiFetch,
     log,
