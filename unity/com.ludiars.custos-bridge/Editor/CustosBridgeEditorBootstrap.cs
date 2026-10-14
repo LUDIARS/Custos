@@ -30,17 +30,20 @@ namespace Ludiars.Custos.Bridge.Editor
 
         static CustosBridgeEditorBootstrap()
         {
-            // EditorPrefs 上の enabled + 設定ファイルの enabled どちらも確認
-            bool editorEnabled = EditorPrefs.GetBool(PrefsKey, false);
+            // /editor/log と /editor/compile-status はブリッジ停止中の出来事も返すので、常に記録する。
+            Control.EditorLogBuffer.Install();
+            Control.CompileStatusTracker.Install();
+
+            // 設定ファイルが enabled なら起動する。メニューで明示的に OFF にした Editor だけは起動しない。
             var cfg = BridgeConfig.Load();
 
-            if (cfg != null && cfg.Enabled && editorEnabled)
+            if (cfg != null && cfg.Enabled && IsEditorToggleOn())
             {
                 StartBridge(cfg);
             }
-            else if (cfg != null && cfg.Enabled && !editorEnabled)
+            else if (cfg != null && cfg.Enabled)
             {
-                Debug.Log("[CustosBridge] Config enabled=true but Editor toggle is OFF. " +
+                Debug.Log("[CustosBridge] Config enabled=true but the Editor toggle was turned OFF. " +
                     "Use menu LUDIARS/Custos Bridge/Enabled to enable.");
             }
 
@@ -53,10 +56,16 @@ namespace Ludiars.Custos.Bridge.Editor
 
         // ── メニュートグル ────────────────────────────────
 
+        /// <summary>
+        /// Editor 側のトグル。一度もメニューを触っていなければ ON (設定ファイルの enabled に従う)。
+        /// プロジェクト側にスクリプトを足さなくても、custos_bridge.json を置くだけで起動する。
+        /// </summary>
+        private static bool IsEditorToggleOn() => EditorPrefs.GetBool(PrefsKey, true);
+
         [MenuItem("LUDIARS/Custos Bridge/Enabled", false, 1)]
         private static void ToggleEnabled()
         {
-            bool current = EditorPrefs.GetBool(PrefsKey, false);
+            bool current = IsEditorToggleOn();
             bool next    = !current;
             EditorPrefs.SetBool(PrefsKey, next);
             Menu.SetChecked("LUDIARS/Custos Bridge/Enabled", next);
@@ -81,7 +90,7 @@ namespace Ludiars.Custos.Bridge.Editor
         [MenuItem("LUDIARS/Custos Bridge/Enabled", true)]
         private static bool ToggleEnabledValidate()
         {
-            Menu.SetChecked("LUDIARS/Custos Bridge/Enabled", EditorPrefs.GetBool(PrefsKey, false));
+            Menu.SetChecked("LUDIARS/Custos Bridge/Enabled", IsEditorToggleOn());
             return true;
         }
 
@@ -92,7 +101,7 @@ namespace Ludiars.Custos.Bridge.Editor
             EditorUtility.DisplayDialog(
                 "Custos Bridge Status",
                 $"Running: {running}\n" +
-                $"Editor toggle: {EditorPrefs.GetBool(PrefsKey, false)}\n" +
+                $"Editor toggle: {IsEditorToggleOn()}\n" +
                 $"Stream active: {(_streamer?.HasActiveStream ?? false)}",
                 "OK");
         }
@@ -150,6 +159,7 @@ namespace Ludiars.Custos.Bridge.Editor
 #if ENABLE_INPUT_SYSTEM
             _server.OnPointer = (x, y, button, phase) => pointerInjector.InjectPointer(x, y, button, phase);
 #endif
+            _server.Routes = new Control.EditorControlRoutes();
             _server.Start();
 
             // quitting で injector も片付ける

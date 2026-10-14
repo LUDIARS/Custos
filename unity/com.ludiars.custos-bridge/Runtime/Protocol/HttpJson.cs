@@ -44,9 +44,28 @@ namespace Ludiars.Custos.Bridge.Protocol
             finally { SafeClose(res); }
         }
 
-        /// <summary>JSON エスケープ (ダブルクォート・バックスラッシュのみ)。</summary>
+        /// <summary>JSON 文字列のエスケープ (引用符・バックスラッシュ・改行などの制御文字)。</summary>
         public static string Escape(string s)
-            => (s ?? string.Empty).Replace("\\", "\\\\").Replace("\"", "\\\"");
+        {
+            if (string.IsNullOrEmpty(s)) return string.Empty;
+            var sb = new StringBuilder(s.Length + 8);
+            foreach (char c in s)
+            {
+                switch (c)
+                {
+                    case '"':  sb.Append("\\\""); break;
+                    case '\\': sb.Append("\\\\"); break;
+                    case '\n': sb.Append("\\n");  break;
+                    case '\r': sb.Append("\\r");  break;
+                    case '\t': sb.Append("\\t");  break;
+                    default:
+                        if (c < 0x20) sb.Append("\\u").Append(((int)c).ToString("x4"));
+                        else sb.Append(c);
+                        break;
+                }
+            }
+            return sb.ToString();
+        }
 
         /// <summary>例外を握り潰して Close する。</summary>
         public static void SafeClose(HttpListenerResponse res)

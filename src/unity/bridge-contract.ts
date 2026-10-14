@@ -1,9 +1,10 @@
 /**
- * PrivateGame 側 Unity ブリッジ (既定 loopback:17778) の契約。
+ * Unity ブリッジ (既定 loopback:17778) の契約。
  *
- * 実装の正本は Unity 側 (`PrivateGame/Assets/PrivateGame/Editor/RemoteDev/`)。
+ * 実装の正本は UPM パッケージ `unity/com.ludiars.custos-bridge`
+ * (`/editor/*` は `Editor/Control/EditorControlRoutes.cs`)。
  * ここはその形を TypeScript に写しただけで、**追加の意味を持たせない**。
- * 設計: `PrivateGame/spec/remote-unity-dev-design.md` §4-B。
+ * 設計: `spec/feature/unity-bridge.md`。
  */
 
 /** ブリッジ既定ポート。Unity 側が塞がっていれば 17779.. へ退避する。 */

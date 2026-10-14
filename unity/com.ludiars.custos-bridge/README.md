@@ -16,6 +16,22 @@ port 既定: **17778** (loopback only)
 | POST | `/pointer` | `{"x":0..1,"y":0..1,"button":0\|1\|2,"phase":"down"\|"up"\|"move"}` — 仮想 Mouse へ注入 (左上原点の正規化座標) |
 | GET | `/state` | `{"isPlaying":bool,"state":<object\|null>}` — ゲームが登録した状態 (行動ログ用) |
 
+### Editor 専用エンドポイント (`/editor/*`)
+
+Editor で動かしたときだけ有効。Custos の Unity パネルと `unityctl` が使う (契約: `src/unity/bridge-contract.ts`)。
+
+| Method | Path | 説明 |
+|--------|------|------|
+| GET | `/editor/status` | Unity バージョン・PlayMode・コンパイル中か・アクティブシーン・未保存シーン |
+| GET | `/editor/compile-status` | 直近のコンパイル結果 (エラー/警告の件数と一覧) |
+| POST | `/editor/compile` | スクリプト再コンパイルを要求 |
+| POST | `/editor/refresh` | `AssetDatabase.Refresh` (asmdef・新規アセットの取り込み) |
+| GET | `/editor/log?since=<seq>&limit=<n>&level=<error\|warn\|log>` | Console ログ (seq はドメインリロードを跨いで続く) |
+| POST | `/editor/play` / `/editor/stop` | PlayMode の開始 / 終了 |
+| GET | `/editor/scene` | 読み込み済みシーンの一覧 |
+| GET | `/editor/hierarchy?depth=<n>&root=<id>` | ヒエラルキー (1 回 500 ノードまで、超えたら `truncated`) |
+| POST | `/editor/publish-capture` | キャプチャを Concordia セッションへ投稿 |
+
 ### ゲーム状態を行動ログに載せる (`CustosPlayState`)
 
 Custos の行動ログ (`playLog`) は `/state` を周期取得し、返った JSON の各キーを
@@ -81,7 +97,8 @@ ffmpeg -f rawvideo -pix_fmt bgra -s WxH -r F -i pipe:0 ...
 
 旧称 `ergo_custos_bridge.json` も後方互換で読む。
 
-2. **Editor** の場合: メニュー `LUDIARS/Custos Bridge/Enabled` を ON にする
+2. **Editor** の場合: 設定ファイルの `enabled: true` だけで起動する。止めたいときはメニュー
+   `LUDIARS/Custos Bridge/Enabled` を OFF にする (その Editor では以後起動しない)
    (設定ファイルが存在すれば `[InitializeOnLoad]` で自動起動も試みる)。
 
 3. **Player ビルド** の場合: `DEVELOPMENT_BUILD` が有効であれば自動起動する。

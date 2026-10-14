@@ -82,6 +82,12 @@ namespace Ludiars.Custos.Bridge
         /// </summary>
         public Action<float, float, int, string> OnPointer { get; set; }
 
+        /// <summary>
+        /// 組み込みでないパス (Editor 操作の /editor/status 等) を引き受ける追加エンドポイント。
+        /// 未設定ならそれらは 404。<see cref="Start"/> 前に設定する。
+        /// </summary>
+        public IBridgeRouteHandler Routes { get; set; }
+
         public void Start()
         {
             if (_isRunning) return;
@@ -196,8 +202,35 @@ namespace Ludiars.Custos.Bridge
                     HandlePublishCapture(req, res);
                     break;
                 default:
-                    HttpJson.WriteJson(res, 404, "{\"error\":\"unknown endpoint\"}");
+                    HandleExtraRoute(req, res, path);
                     break;
+            }
+        }
+
+        // ── 追加エンドポイント (Routes) ─────────────────────
+
+        private void HandleExtraRoute(HttpListenerRequest req, HttpListenerResponse res, string path)
+        {
+            var routes = Routes;
+            if (routes == null || !routes.Handles(path))
+            {
+                HttpJson.WriteJson(res, 404, "{\"error\":\"unknown endpoint\"}");
+                return;
+            }
+            try
+            {
+                string body = string.Empty;
+                if (req.HasEntityBody)
+                {
+                    using var reader = new StreamReader(req.InputStream, req.ContentEncoding ?? Encoding.UTF8);
+                    body = reader.ReadToEnd();
+                }
+                var response = routes.Handle(new BridgeRouteRequest(req.HttpMethod, path, req.QueryString, body));
+                HttpJson.WriteJson(res, response.Status, response.Json);
+            }
+            catch (Exception e)
+            {
+                HttpJson.WriteJson(res, 500, $"{{\"error\":\"{HttpJson.Escape(e.Message)}\"}}");
             }
         }
 

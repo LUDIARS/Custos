@@ -296,6 +296,8 @@ HttpListener.GetContext() loop
   `Application.quitting` で listener 停止 + 仮想デバイス除去。
 - **Editor**: `[InitializeOnLoad]` 静的コンストラクタで設定を読み、有効なら起動。
   メニュー `LUDIARS/Custos Bridge/Enabled` (checked toggle、状態は `EditorPrefs`) で随時 ON/OFF。
+  トグルを一度も触っていない Editor は ON 扱いで、設定ファイルの `enabled` だけで起動する
+  (プロジェクト側に自動 ON 用のスクリプトを足さない)。明示的に OFF にした Editor は起動しない。
   `AssemblyReloadEvents.beforeAssemblyReload` と `EditorApplication.quitting` で必ず停止
   (domain reload 後に `[InitializeOnLoad]` が再起動する — プロトタイプ実証済)。
   PlayMode 遷移 (`playModeStateChanged`) では listener を維持し、provider だけ切り替える。
@@ -312,7 +314,7 @@ HttpListener.GetContext() loop
 | 項目 | 既定 | 上書き |
 |------|------|--------|
 | port | **17778** | env `CUSTOS_UNITY_BRIDGE_PORT` / `<unity project root>/custos-bridge.json` の `port` |
-| enabled (Editor) | false (明示 opt-in) | メニュー toggle / env `CUSTOS_UNITY_BRIDGE_ENABLED` |
+| enabled (Editor) | 設定ファイルの `enabled` に従う (メニューで OFF にした Editor は起動しない) | メニュー toggle / env `CUSTOS_UNITY_BRIDGE_ENABLED` |
 | token | なし | json `token` (設定時は `X-Auth-Token` ヘッダ一致を要求 — プロトタイプ互換) |
 | captureMode | `auto` | json `captureMode`: `runtime` / `camera` / `window` / `auto` |
 | maxLongEdge | 1280 | json `maxLongEdge` (0 = 無制限) |
