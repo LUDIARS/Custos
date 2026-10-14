@@ -45,6 +45,8 @@ interface SessionDiag {
     audioError?:     string;
 }
 const DIAG_HISTORY_MAX = 10;
+/** ICE が disconnected のまま戻らなければ session を閉じるまでの猶予。 */
+const ICE_DISCONNECT_GRACE_MS = 10_000;
 const diagHistory: SessionDiag[] = [];
 
 export function getRtcDiagnostics(): SessionDiag[] {
@@ -247,9 +249,22 @@ export class WebRTCBroker extends EventEmitter {
             diag.iceStates.push(`${Date.now() - diag.createdAt}ms:gather=${s}`);
             log.info({ sessionId, iceGatheringState: s }, "ice gathering state");
         });
+        // ブラウザが去っても werift の connectionState は connected のまま残り、ICE だけが
+        // disconnected になる。ICE で判断して閉じないと、相手のいない session に送り続ける。
+        // disconnected は一時的な途切れのこともあるので猶予を置く。
+        let iceGraceTimer: ReturnType<typeof setTimeout> | null = null;
         subscribe("iceConnectionStateChange", (s) => {
             diag.iceStates.push(`${Date.now() - diag.createdAt}ms:conn=${s}`);
             log.info({ sessionId, iceConnectionState: s }, "ice connection state");
+            if (iceGraceTimer) { clearTimeout(iceGraceTimer); iceGraceTimer = null; }
+            if (s === "failed" || s === "closed") {
+                this.closeSession(sessionId);
+            } else if (s === "disconnected") {
+                iceGraceTimer = setTimeout(() => {
+                    log.info({ sessionId }, "ICE stayed disconnected — closing session");
+                    this.closeSession(sessionId);
+                }, ICE_DISCONNECT_GRACE_MS);
+            }
         });
         subscribe("connectionStateChange", (s) => {
             // 既に on(connectionstatechange) で取れているはずだが冗長に。

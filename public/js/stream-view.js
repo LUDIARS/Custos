@@ -22,9 +22,13 @@ export function createStreamView({ elements, apiFetch, log }) {
     let retryDelay = RETRY_BASE_MS;
     let live = false;
 
-    video.addEventListener("playing", () => {
-        if (sessionId) showVideo();
-    });
+    // 映像のフレームが描ける状態になったら表示に切り替える。playing は端末によって出ないこと
+    // があるので、最初のフレームの大きさが分かった時点 (loadeddata / resize) でも切り替える。
+    for (const event of ["playing", "loadeddata", "resize"]) {
+        video.addEventListener(event, () => {
+            if (video.videoWidth > 0) showVideo();
+        });
+    }
     // ブラウザは音の自動再生を止めるので、消音で始めてボタン (ユーザ操作) で音を出す。
     audioToggle.addEventListener("click", () => {
         video.muted = !video.muted;

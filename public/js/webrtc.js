@@ -36,6 +36,10 @@ export async function connectWebRTC({ appId, videoEl, apiFetch, onLog, onState, 
     videoEl.srcObject = remote;
     pc.ontrack = (ev) => {
         remote.addTrack(ev.track);
+        // iOS Safari などは、srcObject に渡した後で足された track では再生を始めない。
+        // track が届くたびに渡し直して明示的に再生する (消音なので自動再生の制限に掛からない)。
+        videoEl.srcObject = remote;
+        videoEl.play().catch((err) => onLog?.(`play() rejected: ${err?.message ?? err}`, true));
         onLog?.(`${ev.track.kind} track attached`);
     };
     pc.onconnectionstatechange = () => {
