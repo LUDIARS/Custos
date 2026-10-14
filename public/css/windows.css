@@ -1,0 +1,113 @@
+/*
+ * フローティングウインドウ (PC) と、スマホの縦 3 段構成。
+ *
+ * PC (body.layout-desktop): .desk の上に .fw を absolute で重ねる。位置と大きさは
+ *   window-manager.js が inline style で与える。
+ * スマホ (body.layout-mobile): ヘッダ / VIEW / PAD を縦に並べる。LOG・TEST・SETTINGS は
+ *   下からせり出すシートとして 1 枚ずつ開く。
+ */
+
+.header-controls { margin-left: 0; }
+.app-header { flex-wrap: wrap; }
+.window-toggles { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+.window-toggle {
+  padding: 4px 10px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em;
+  color: var(--fg-dim);
+}
+.window-toggle.open { color: var(--fg); border-color: var(--accent); }
+
+.desk {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ─── ウインドウ共通 ─── */
+.fw {
+  display: flex; flex-direction: column;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  min-width: 0; min-height: 0;
+}
+.fw.fw-hidden { display: none; }
+.fw-titlebar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 6px 4px 12px;
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.fw-title {
+  flex: 1 1 auto;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: var(--fg-dim);
+}
+.fw-btn, .fw-option, .fw-snapshot {
+  padding: 2px 8px; font-size: 12px; line-height: 1.4;
+}
+.fw-btn { min-width: 28px; }
+.fw-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.fw-resize { display: none; }
+
+/* ─── PC: フローティング ─── */
+body.layout-desktop .fw { position: absolute; }
+body.layout-desktop .fw.fw-focused { border-color: var(--accent); }
+body.layout-desktop .fw-titlebar { cursor: move; touch-action: none; }
+body.layout-desktop .fw-titlebar button { cursor: pointer; }
+body.layout-desktop .fw.fw-minimized { height: auto !important; }
+body.layout-desktop .fw.fw-minimized .fw-body,
+body.layout-desktop .fw.fw-minimized .fw-resize { display: none; }
+body.layout-desktop .fw-resize {
+  display: block;
+  position: absolute; right: 0; bottom: 0;
+  width: 18px; height: 18px;
+  cursor: nwse-resize; touch-action: none;
+  background: linear-gradient(135deg, transparent 50%, var(--border) 50%);
+}
+body.layout-desktop.fw-dragging { cursor: move; }
+body.layout-desktop.fw-dragging iframe,
+body.layout-desktop.fw-dragging video { pointer-events: none; }
+
+/* ─── スマホ: ヘッダ / 映像 / 操作部分の縦構成 ─── */
+body.layout-mobile .desktop-only { display: none; }
+body.layout-mobile .app-header { padding: 6px 10px; gap: 6px; }
+body.layout-mobile .app-header .subtitle { display: none; }
+body.layout-mobile .header-controls { gap: 4px; }
+body.layout-mobile #appSelect { min-width: 0; flex: 1 1 140px; }
+body.layout-mobile .header-controls button { padding: 4px 8px; }
+body.layout-mobile .window-toggles { margin-left: 0; }
+body.layout-mobile .app-footer { display: none; }
+
+body.layout-mobile .desk {
+  display: flex; flex-direction: column;
+}
+body.layout-mobile .fw {
+  border-radius: 0; border-left: 0; border-right: 0; box-shadow: none;
+}
+body.layout-mobile .fw-btn { display: none; }
+/* 映像は残りの高さを全部使う。操作部分はパッドが収まる高さで固定。 */
+body.layout-mobile .fw[data-window="view"] { flex: 1 1 auto; display: flex; }
+body.layout-mobile .fw[data-window="pad"]  { flex: 0 0 auto; display: flex; max-height: 46vh; }
+body.layout-mobile .fw[data-window="view"] .fw-titlebar { display: none; }
+body.layout-mobile .fw[data-window="pad"] .fw-title { display: none; }
+body.layout-mobile .fw[data-window="pad"] .fw-titlebar { justify-content: flex-end; padding: 2px 6px; }
+/* スマホでは Unity の Hierarchy / Console は畳み、映像と操作を優先する (LOG シートで見る)。 */
+body.layout-mobile .unity-hierarchy-pane,
+body.layout-mobile .unity-console-pane { display: none !important; }
+
+/* LOG / TEST / SETTINGS は下からのシート。開いているのは 1 枚だけ。 */
+body.layout-mobile .fw[data-window="logs"],
+body.layout-mobile .fw[data-window="tests"],
+body.layout-mobile .fw[data-window="settings"] {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  height: 60vh; z-index: 50;
+  border-top: 1px solid var(--accent);
+  border-radius: 12px 12px 0 0;
+  box-shadow: 0 -8px 24px rgba(0,0,0,0.45);
+}
+body.layout-mobile .fw[data-window="logs"] .fw-btn[data-fw-close],
+body.layout-mobile .fw[data-window="tests"] .fw-btn[data-fw-close],
+body.layout-mobile .fw[data-window="settings"] .fw-btn[data-fw-close] { display: inline-block; }

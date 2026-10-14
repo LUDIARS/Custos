@@ -20,6 +20,7 @@ import { AppsRegistry }   from "./apps/registry.js";
 import { AppsRunner }     from "./apps/runner.js";
 import { buildApp }       from "./app.js";
 import { attachWebSocketBroker } from "./ws/handler.js";
+import { ControlLease } from "./input/control-lease.js";
 import { WebRTCBroker } from "./capture/webrtc-broker.js";
 import { ScreenshotStreamer } from "./capture/screenshot-stream.js";
 import { RuntimeStreamPrefs } from "./runtime/stream-prefs.js";
@@ -66,6 +67,8 @@ async function main() {
     const registry = new AppsRegistry(cfg.apps);
     const runner   = new AppsRunner(registry);
     const broker   = new WebRTCBroker();
+    // 操作権は全ポートの WS broker と REST で 1 つを共有する (どちらのポートから繋いでも同じ player)。
+    const control  = new ControlLease();
     const prefs    = new RuntimeStreamPrefs();
     const streamer = new ScreenshotStreamer(registry, prefs);
     // 行動ログ (spec/feature/remote-play-and-play-log.md)。salt はログを書くときだけ要るので
@@ -89,7 +92,7 @@ async function main() {
     });
 
     // 単一の app instance を 2 ポートで listen させる。
-    const app = buildApp({ registry, runner, broker, prefs, farm, playLogDir });
+    const app = buildApp({ registry, runner, broker, prefs, control, farm, playLogDir });
     const servers: HttpServer[] = [];
 
     // 非 loopback に bind するなら認証必須。CERNERE_URL 未設定 (anonymous 許可) や
@@ -120,7 +123,7 @@ async function main() {
             logger.info({ host: info.address, port: info.port, label }, "listening");
         });
         // WS broker は全ポートで attach する (どちらに繋いでも /ws が動く)。
-        attachWebSocketBroker(s as unknown as HttpServer, { registry, runner, streamer, playLog }, "/ws");
+        attachWebSocketBroker(s as unknown as HttpServer, { registry, runner, streamer, playLog, control }, "/ws");
         servers.push(s as unknown as HttpServer);
     }
 

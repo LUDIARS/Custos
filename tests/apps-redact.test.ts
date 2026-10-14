@@ -42,6 +42,20 @@ describe("redact", () => {
         expect(redact(baseConfig({})).hasUnityBridge).toBe(false);
     });
 
+    it("exposes hasVideo when either a capture or an in-app bridge can feed WebRTC", () => {
+        // VIEW はこのフラグで WebRTC の自動接続を決める。落ちると映像が永久に出ない。
+        const bridge = baseConfig({
+            inAppBridge: { kind: "unity", host: "127.0.0.1", port: 17778, fps: 24 },
+        } as Partial<AppConfig>);
+        const capture = baseConfig({
+            capture: { type: "window", windowTitle: "X", fps: 30, preset: "veryfast" },
+        } as Partial<AppConfig>);
+
+        expect(redact(bridge).hasVideo).toBe(true);
+        expect(redact(capture).hasVideo).toBe(true);
+        expect(redact(baseConfig({})).hasVideo).toBe(false);
+    });
+
     it("keeps the bridge host and port off the wire", () => {
         // ブラウザは /api/unity/:appId/* 経由でしか触らないので接続先を知る必要がない。
         const cfg = baseConfig({

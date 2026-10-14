@@ -32,19 +32,43 @@
 ### 1.2 Custos (TS)
 
 - WS `ClientMessage` に `pointer { appId, x, y, button, phase }` を追加 (`src/shared/types.ts` と `public/js/app.js` を同時更新)。
-- `sendPointer(app, …)` (`src/input/forwarder.ts`): `allowMouse` が false なら破棄。`inAppBridge` があれば `/pointer` へ。
+- `sendPointer(app, …)` (`src/input/forwarder.ts`): `allowMouse` が false なら破棄。`allowMouse` の既定は **true**
+  (2026-10-14 変更。スマホのタップ操作を前提にするため。明示的に `false` の app だけ止める)。`inAppBridge` があれば `/pointer` へ。
   ブリッジ無しの desktop は `phase:"down"` のときだけ従来の nut-js click (ウィンドウ座標は不明なので未対応扱いで warn)。
 - 正規化座標は 0..1 に clamp、`phase` / `button` は zod で検証してから転送。
 
 ### 1.3 フロントエンド
 
-- 「遠隔プレイ」トグル (ストリーム表示部)。ON の間:
+- 「遠隔プレイ」トグル (ストリーム表示部)。**既定 ON** (ブラウザに保存)。OFF にすると入力を止め、持っている操作権を手放す (§1.4)。ON の間:
   - 映像 (`<video>` / snapshot `<img>`) 上の pointerdown / pointermove / pointerup を正規化座標で送る。
     `object-fit: contain` のレターボックスを除いた映像矩形で割る (`public/js/play-input.js` の純関数、vitest 対象)。
     move は押下中・非押下中とも 30Hz に間引く。contextmenu は抑止。
   - 映像にフォーカスがある間の keydown / keyup を `KeyboardEvent.code` → Custos のキー名 (`KEY_TABLE` 名) に変換して送る。
     auto-repeat は捨てる。未対応キーは送らない。フォーカスが外れたら押下中のキーを全て up で送る (押しっぱなし事故防止)。
 - `allowMouse` / `allowKeyboard` が false の app はトグル時にその旨を表示し、その種別は送らない。
+- **タッチ (スマホ前提)**: 1 本指のタッチをマウス操作に変換する (`touchGestureStep`、`public/js/play-input-logic.js`、vitest 対象)。
+  - タップ (動かさずに離す) → 左クリック (down → up)
+  - ドラッグ (8px 以上動かす) → 左ボタンを押したまま移動
+  - 長押し (動かさずに 500ms) → 右クリック
+  - 押した瞬間には送らない (タップ / ドラッグ / 長押しは、動いたか・時間が来たか・離したかで決まるため)。2 本目の指は無視。
+  - 映像の上ではブラウザの拡大縮小・スクロールを止める (`touch-action: none`)。
+- **バーチャルパッド**: 左に方向入力 (アナログスティック / 十字キーを切り替え、選択はブラウザに保存)、右に ABXY、上に肩ボタン、
+  中央にメニュー、下に割り当て先の無いボタン。割り当ては `input.buttons` のキー (`public/js/virtual-pad-logic.js`)。
+  スティックは傾きを 8 方向に分け (デッドゾーン 0.3)、WASD (無い方向は矢印キー) の押下 / 解放として送る。
+
+### 1.4 操作権と観戦モード
+
+Custos は複数人が同時に操作することを想定しない。app ごとに操作権を 1 接続だけに持たせる (`src/input/control-lease.ts`)。
+
+- **player**: 最初に入力 (`key` / `click` / `pointer` / `button`) を送った接続。入力を送った時点でサーバーが操作権を渡す。
+- **spectator (観戦)**: 他の接続が player の間の接続。映像・ログは見られるが、入力は WS で捨てられ、Unity の状態を変える
+  REST (`compile` / `refresh` / `play` / `stop` / `publish-capture`) は 409 になる (`src/routes/control-guard.ts`)。
+- **free**: 誰も操作していない。最初に操作した接続が player になる。Unity の REST は誰でも通る。
+- 操作権は player が「遠隔プレイ」を OFF にする (`control { want: false }`)、unsubscribe する、切断するで解放される。
+  奪う手段は持たない (観戦者は player が手放すのを待つ)。
+- WS: 接続直後に `welcome { clientId }`、subscribe 直後と持ち主が変わるたびに `control { appId, role }` を送る。
+  ブラウザは REST に `x-custos-client: <clientId>` を付ける (これで REST の呼び出し元を WS の接続と結び付ける)。
+- 操作権は全ポートの WS broker と REST で 1 つを共有する (`src/main.ts`)。
 
 ## 2. 行動ログ (play log)
 

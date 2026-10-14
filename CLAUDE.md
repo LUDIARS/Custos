@@ -40,8 +40,13 @@ MVP では `CUSTOS_OPEN=1` で素通し、未設定なら token=非空 のみチ
 | バックエンド | フロントエンド |
 |----|----|
 | `src/routes/apps-routes.ts` | `public/js/app.js` の `apiAction()` |
-| `src/ws/handler.ts`         | `public/js/app.js` の `connectWs()` / `triggerButton()` |
+| `src/ws/handler.ts`         | `public/js/ws-client.js` / `virtual-pad.js` / `play-input.js` (送信側) |
 | `src/shared/types.ts`       | `public/js/app.js` の `handleServerMessage()` (構造を一致させる) |
+| `src/input/control-lease.ts` | `public/js/control-state.js` (操作権 player / spectator / free) |
+
+画面はフローティングウインドウ (PC) / 縦 3 段 (スマホ)。設計の正本は
+`spec/feature/floating-ui-and-shared-video.md`、操作権と観戦は
+`spec/feature/remote-play-and-play-log.md` §1.4。
 
 WS メッセージ型を変更したら必ず両方 (TS と JS) を同コミットで更新する。
 

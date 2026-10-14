@@ -80,7 +80,8 @@ const inputSchema = z.object({
     /** バーチャルキー定義。Frontend で 1 つ 1 つボタンとして表示する。 */
     buttons: z.array(buttonSchema).default([]),
     allowKeyboard: z.boolean().default(true),
-    allowMouse:    z.boolean().default(false),
+    /** スマホのタップ操作を前提にするため既定で許可する。明示的に false の app だけ止める。 */
+    allowMouse:    z.boolean().default(true),
 });
 
 const logsSchema = z.object({
@@ -159,7 +160,7 @@ export const appConfigSchema = z.object({
     ergoCustos:  ergoCustosSchema.optional(),
     /** アプリ内 HTTP ブリッジ設定。設定すると screenshot / key inject をブリッジ経由で処理する。 */
     inAppBridge: inAppBridgeSchema.optional(),
-    input:   inputSchema.default({ buttons: [], allowKeyboard: true, allowMouse: false }),
+    input:   inputSchema.default({ buttons: [], allowKeyboard: true, allowMouse: true }),
     logs:    logsSchema.default({ stdout: true, stderr: true, files: [] }),
     /** 行動ログ (spec/feature/remote-play-and-play-log.md §2)。無ければ記録しない。 */
     playLog: playLogSchema.optional(),

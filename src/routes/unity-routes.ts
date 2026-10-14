@@ -13,10 +13,14 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { BridgeClient, BridgeHttpError, BridgeUnreachableError } from "../unity/bridge-client.js";
 import { resolveBridgeTarget, type BridgeCapableAppConfig, type BridgeTarget } from "../unity/bridge-target.js";
+import type { ControlLease } from "../input/control-lease.js";
+import { requireControl } from "./control-guard.js";
 
 export interface UnityRoutesDeps {
     /** apps.json の登録一覧を返す。テストでは配列を直接渡せる。 */
     listConfigs: () => readonly BridgeCapableAppConfig[];
+    /** 操作権。他の接続が遠隔プレイ中なら Play/Stop などの操作を拒否する。 */
+    control: ControlLease;
     /** テスト差し替え用。既定は実 HTTP クライアント。 */
     createClient?: (target: BridgeTarget) => BridgeClient;
 }
@@ -72,6 +76,8 @@ export function createUnityRoutes(deps: UnityRoutesDeps): Hono {
     const appId = (c: Context) => c.req.param("appId");
 
     const app = new Hono();
+    // 状態を変える操作は、観戦中の接続から受け付けない (読み取り系は観戦者にも見せる)。
+    const guarded = requireControl(deps.control, (c) => appId(c) ?? "");
 
     app.get("/:appId/health", async (c) => send(c, await proxy(appId(c), (b) => b.health())));
     app.get("/:appId/status", async (c) => send(c, await proxy(appId(c), (b) => b.status())));
@@ -95,22 +101,22 @@ export function createUnityRoutes(deps: UnityRoutesDeps): Hono {
         )));
     });
 
-    app.post("/:appId/compile", async (c) => send(c, await proxy(appId(c), async (b) => {
+    app.post("/:appId/compile", guarded, async (c) => send(c, await proxy(appId(c), async (b) => {
         await b.requestCompile();
         return { requested: true };
     })));
 
-    app.post("/:appId/refresh", async (c) => send(c, await proxy(appId(c), async (b) => {
+    app.post("/:appId/refresh", guarded, async (c) => send(c, await proxy(appId(c), async (b) => {
         // asmdef / 新規アセットの取り込み。遠隔ではウィンドウをフォーカスできないので
         // これが無いと .asmdef の変更が永久に反映されない。
         await b.refresh();
         return { refreshed: true };
     })));
 
-    app.post("/:appId/play", async (c) => send(c, await proxy(appId(c), (b) => b.play())));
-    app.post("/:appId/stop", async (c) => send(c, await proxy(appId(c), (b) => b.stop())));
+    app.post("/:appId/play", guarded, async (c) => send(c, await proxy(appId(c), (b) => b.play())));
+    app.post("/:appId/stop", guarded, async (c) => send(c, await proxy(appId(c), (b) => b.stop())));
 
-    app.post("/:appId/publish-capture", async (c) => {
+    app.post("/:appId/publish-capture", guarded, async (c) => {
         const body = await c.req.json().catch(() => null) as { caption?: string; source?: string } | null;
         return send(c, await proxy(appId(c), (b) => b.publishCapture(
             body?.caption ?? "",

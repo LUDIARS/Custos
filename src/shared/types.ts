@@ -36,8 +36,15 @@ export interface AppStatus {
 
 // ─── WS message envelope ──────────────────────────────────────
 
+/** 接続から見た遠隔プレイの操作権。src/input/control-lease.ts の ControlRole と一致させる。 */
+export type ControlRole = "player" | "spectator" | "free";
+
 /** Server → Client. */
 export type ServerMessage =
+    /** 接続直後に 1 回。clientId は REST の `x-custos-client` ヘッダに付ける。 */
+    | { type: "welcome";    clientId: string }
+    /** subscribe 中の app の操作権が変わったとき (と subscribe 直後)。 */
+    | { type: "control";    appId: string;  role: ControlRole }
     | { type: "hello";      appId: string;  status: AppStatus }
     | { type: "log";        appId: string;  kind: RunnerKind;  stream: "stdout" | "stderr"; text: string; ts: number }
     | { type: "status";     appId: string;  status: AppStatus }
@@ -53,4 +60,6 @@ export type ClientMessage =
     | { type: "click";       appId: string; x: number;    y: number; button?: "left" | "right" | "middle" }
     /** 遠隔プレイのポインタ。x / y は配信映像の左上原点 0..1。 */
     | { type: "pointer";     appId: string; x: number;    y: number; button: "left" | "right" | "middle"; phase: "down" | "up" | "move" }
-    | { type: "button";      appId: string; id: string };
+    | { type: "button";      appId: string; id: string }
+    /** 遠隔プレイの ON/OFF。want=true で操作権を取りにいき、false で手放す。 */
+    | { type: "control";     appId: string; want: boolean };

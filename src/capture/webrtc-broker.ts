@@ -4,11 +4,11 @@
  * フロー:
  *   1. ブラウザ from offer SDP
  *   2. werift PC を作る (codec H.264 を明示)、sendonly トランシーバ追加
- *   3. UDP listener を起動 (ランダムポート、127.0.0.1)
- *   4. ffmpeg を `-f rtp rtp://127.0.0.1:<port>` で起動 → RTP datagram が
- *      UDP listener に届く
- *   5. datagram = 1 RTP packet を `track.writeRtp(buf)` に流し込む
- *   6. werift が peer に転送
+ *   3. app の映像源 (SharedRtpSourcePool) を購読する。映像源は app ごとに 1 本で、
+ *      ffmpeg が `-f rtp rtp://127.0.0.1:<port>` で送る RTP datagram を
+ *      購読中の全 session に配る (観戦者が増えても ffmpeg は増えない)
+ *   4. datagram = 1 RTP packet を `track.writeRtp(buf)` に流し込む
+ *   5. werift が peer に転送
  *
  * 旧来の「Annex-B NAL を直接 writeRtp に渡す」アプローチは werift が
  * H.264 RTP packetizer を提供しないため動かなかった。ffmpeg の RTP muxer
@@ -17,10 +17,9 @@
 
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import dgram, { type Socket as DgramSocket } from "node:dgram";
 import { childLogger } from "../shared/logger.js";
 import type { AppConfig } from "../config/apps-config.js";
-import { FfmpegPipeline } from "./ffmpeg-pipeline.js";
+import { SharedRtpSourcePool } from "./shared-rtp-source.js";
 
 const log = childLogger("webrtc-broker");
 
@@ -103,12 +102,7 @@ interface CaptureSession {
     id:          string;
     appId:       string;
     pc:          PCLike;
-    track:       MediaTrackLike;
-    pipeline:    FfmpegPipeline;
-    udp:         DgramSocket;
-    rtpPort:     number;
     createdAt:   number;
-    rtpReceived: number;
     diag:        SessionDiag;
 }
 
@@ -118,6 +112,10 @@ export interface BrokerEvents {
 
 export class WebRTCBroker extends EventEmitter {
     private sessions = new Map<string, CaptureSession>();
+
+    constructor(private readonly sources: SharedRtpSourcePool = new SharedRtpSourcePool()) {
+        super();
+    }
 
     /** werift が使えるか + capture 設定があるかの事前チェック。 */
     async available(): Promise<boolean> {
@@ -171,24 +169,8 @@ export class WebRTCBroker extends EventEmitter {
             answerSdpLines: 0,
         };
 
-        // ── UDP listener (ffmpeg が送ってくる RTP) ──────────────────
-        const udp = dgram.createSocket("udp4");
-        const rtpPort = await new Promise<number>((resolveOuter, rejectOuter) => {
-            udp.once("error", rejectOuter);
-            udp.bind({ address: "127.0.0.1", port: 0 }, () => {
-                const a = udp.address();
-                if (typeof a === "string" || !a) {
-                    rejectOuter(new Error("udp bind: no address"));
-                    return;
-                }
-                resolveOuter(a.port);
-            });
-        });
-
-        diag.rtpPort = rtpPort;
-
         let rtpReceived = 0;
-        udp.on("message", (msg) => {
+        const onPacket = (msg: Buffer) => {
             try {
                 track.writeRtp(msg);
                 rtpReceived++;
@@ -197,19 +179,13 @@ export class WebRTCBroker extends EventEmitter {
                     diag.firstRtpAtMs = Date.now() - diag.createdAt;
                     log.info({ sessionId, firstRtpAtMs: diag.firstRtpAtMs, size: msg.length },
                              "first RTP datagram arrived");
-                } else if (rtpReceived % 60 === 0) {
-                    log.info({ sessionId, rtpReceived, lastSize: msg.length },
-                             "RTP forwarded");
                 }
             } catch (err) {
                 const msgErr = err instanceof Error ? err.message : String(err);
                 log.warn({ err: msgErr, sessionId, datagramSize: msg.length },
                          "writeRtp failed");
             }
-        });
-        udp.on("error", (err) => {
-            log.warn({ err: err.message, sessionId }, "udp socket error");
-        });
+        };
 
         // ── PC state hooks ───────────────────────────────────────
         const onState = (state: string) => {
@@ -258,41 +234,23 @@ export class WebRTCBroker extends EventEmitter {
         const summary = sdpSummary(finalAnswer.sdp);
         log.info({ sessionId, ...summary }, "answer SDP summary");
 
-        // ── ffmpeg pipeline ─────────────────────────────────────
-        // source 選択: inAppBridge があれば bridge-stream、無ければ gdigrab(capture)。
-        const pipeline = new FfmpegPipeline();
-        pipeline.on("exit", () => this.closeSession(sessionId));
-        pipeline.on("error", (err: Error) => log.warn({ err }, "ffmpeg pipeline error"));
-        pipeline.on("stderr", (line: string) => {
-            // 重大な失敗は session close 候補だが、起動初期のノイズもあるので
-            // ここでは log だけ + diag に直近 20 行を保持。
-            diag.ffmpegStderr.push(line);
-            if (diag.ffmpegStderr.length > 20) diag.ffmpegStderr.shift();
-            log.debug({ line }, "ffmpeg stderr");
-        });
-
+        // ── 映像源の購読 ─────────────────────────────────────────
+        // 映像源 (ffmpeg) は app ごとに共有。無ければここで起動される。
         try {
-            if (app.inAppBridge) {
-                // bridge-stream source: HTTP 接続は非同期。
-                const meta = await pipeline.startBridgeStream(app.inAppBridge, { rtpPort });
-                log.info(
-                    { sessionId, appId: app.id, ...meta, rtpPort },
-                    "capture session opened (bridge-stream source)",
-                );
-            } else {
-                // gdigrab / x11grab / avfoundation source (従来経路)。
-                pipeline.start(app, { rtpPort });
-                log.info({ sessionId, appId: app.id, rtpPort }, "capture session opened (gdigrab source)");
-            }
+            diag.rtpPort = await this.sources.acquire(app, sessionId, {
+                onPacket,
+                onEnd: () => this.closeSession(sessionId),
+            });
         } catch (err) {
-            try { udp.close(); } catch { /* ignore */ }
-            try { pc.close(); }   catch { /* ignore */ }
+            try { pc.close(); } catch { /* 応答前の失敗。後始末なので best-effort */ }
             throw err;
         }
+        diag.ffmpegStderr = this.sources.stderrTail(app.id);
+        log.info({ sessionId, appId: app.id, subscribers: this.sources.subscriberCount(app.id) },
+                 "capture session opened");
 
         const session: CaptureSession = {
-            id: sessionId, appId: app.id, pc, track, pipeline, udp,
-            rtpPort, createdAt: Date.now(), rtpReceived: 0, diag,
+            id: sessionId, appId: app.id, pc, createdAt: Date.now(), diag,
         };
         this.sessions.set(sessionId, session);
 
@@ -308,7 +266,7 @@ export class WebRTCBroker extends EventEmitter {
                     rtpReceived,
                     pcStates:    diag.pcStates,
                     iceStates:   diag.iceStates,
-                    ffmpegTail:  diag.ffmpegStderr.slice(-5),
+                    ffmpegTail:  this.sources.stderrTail(app.id).slice(-5),
                 }, "no RTP after 5s — check ffmpeg / window title");
             }
         }, 5000);
@@ -319,11 +277,11 @@ export class WebRTCBroker extends EventEmitter {
     closeSession(sessionId: string): boolean {
         const s = this.sessions.get(sessionId);
         if (!s) return false;
-        try { s.pipeline.stop(); } catch { /* ignore */ }
-        try { s.udp.close(); }      catch { /* ignore */ }
-        try { s.pc.close(); }        catch { /* ignore */ }
-        s.diag.closedAt = Date.now();
+        // 先に map から外す。pc.close() が connectionstatechange 経由で再入しても二重に閉じない。
         this.sessions.delete(sessionId);
+        this.sources.release(s.appId, sessionId);
+        try { s.pc.close(); } catch { /* 既に閉じていることがある。後始末なので best-effort */ }
+        s.diag.closedAt = Date.now();
         this.emit("session-closed", sessionId);
         log.info({
             sessionId,
@@ -343,6 +301,7 @@ export class WebRTCBroker extends EventEmitter {
 
     shutdown(): void {
         for (const sid of [...this.sessions.keys()]) this.closeSession(sid);
+        this.sources.shutdown();
     }
 }
 

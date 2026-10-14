@@ -69,3 +69,84 @@ export function pointerButtonName(button) {
 export function shouldSendMove(lastSentAt, now, minIntervalMs) {
     return now - lastSentAt >= minIntervalMs;
 }
+
+/** タッチを長押しとみなして右クリックにするまでの時間 (ms)。 */
+export const LONG_PRESS_MS = 500;
+/** タッチがこれ以上動いたらドラッグとみなす (px)。指の揺れでタップが崩れないための遊び。 */
+export const DRAG_THRESHOLD_PX = 8;
+
+/** タッチジェスチャの初期状態。 */
+export const TOUCH_IDLE = Object.freeze({ phase: "idle" });
+
+/**
+ * 1 本指のタッチを、マウスのボタン操作に変換する状態遷移 (スマホ操作の前提)。
+ *
+ * - タップ (動かさずに離す)       → 左クリック (down → up)
+ * - ドラッグ (しきい値以上動かす) → 左ボタンを押したまま移動
+ * - 長押し (動かさずに LONG_PRESS_MS) → 右クリック
+ *
+ * 押した瞬間には何も送らない。タップか長押しかドラッグかは、動いたか・時間が来たか・
+ * 離したかで初めて決まるため。
+ *
+ * @param {{phase:string, startX?:number, startY?:number, startPos?:{x:number,y:number}, lastPos?:{x:number,y:number}}} state
+ * @param {{type:"down"|"move"|"up"|"timer", clientX?:number, clientY?:number, pos?:{x:number,y:number}|null}} event
+ *   pos は映像上の 0..1 座標 (映像外なら null)
+ * @returns {{state:object, actions:Array<{button:"left"|"right", phase:"down"|"up"|"move", pos:{x:number,y:number}}>}}
+ */
+export function touchGestureStep(state, event, dragThresholdPx = DRAG_THRESHOLD_PX) {
+    switch (event.type) {
+        case "down": {
+            if (!event.pos) return { state: TOUCH_IDLE, actions: [] };
+            return {
+                state: { phase: "pending", startX: event.clientX, startY: event.clientY, startPos: event.pos, lastPos: event.pos },
+                actions: [],
+            };
+        }
+        case "move": {
+            if (state.phase === "pending") {
+                const moved = Math.hypot(event.clientX - state.startX, event.clientY - state.startY);
+                if (moved < dragThresholdPx) return { state, actions: [] };
+                const pos = event.pos ?? state.lastPos;
+                return {
+                    state: { ...state, phase: "dragging", lastPos: pos },
+                    actions: [
+                        { button: "left", phase: "down", pos: state.startPos },
+                        { button: "left", phase: "move", pos },
+                    ],
+                };
+            }
+            if (state.phase === "dragging") {
+                const pos = event.pos ?? state.lastPos;
+                return { state: { ...state, lastPos: pos }, actions: [{ button: "left", phase: "move", pos }] };
+            }
+            return { state, actions: [] };
+        }
+        case "timer": {
+            if (state.phase !== "pending") return { state, actions: [] };
+            return {
+                state: { ...state, phase: "held" },
+                actions: [
+                    { button: "right", phase: "down", pos: state.startPos },
+                    { button: "right", phase: "up", pos: state.startPos },
+                ],
+            };
+        }
+        case "up": {
+            if (state.phase === "pending") {
+                return {
+                    state: TOUCH_IDLE,
+                    actions: [
+                        { button: "left", phase: "down", pos: state.startPos },
+                        { button: "left", phase: "up", pos: state.startPos },
+                    ],
+                };
+            }
+            if (state.phase === "dragging") {
+                return { state: TOUCH_IDLE, actions: [{ button: "left", phase: "up", pos: event.pos ?? state.lastPos }] };
+            }
+            return { state: TOUCH_IDLE, actions: [] };
+        }
+        default:
+            return { state, actions: [] };
+    }
+}

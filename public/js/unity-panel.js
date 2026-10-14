@@ -10,8 +10,6 @@ const POLL_INTERVAL_MS = 2_000;
 
 export function createUnityPanel({ apiFetch, getAppId }) {
     const elements = {
-        unavailable: document.getElementById("unityUnavailable"),
-        content: document.getElementById("unityContent"),
         bridge: document.getElementById("unityBridge"),
         version: document.getElementById("unityVersion"),
         mode: document.getElementById("unityMode"),
@@ -36,6 +34,7 @@ export function createUnityPanel({ apiFetch, getAppId }) {
         expandedIds: new Set(),
         selectedId: null,
         pollTimer: null,
+        operable: true,
     };
 
     elements.filters.forEach((button) => {
@@ -190,10 +189,15 @@ export function createUnityPanel({ apiFetch, getAppId }) {
         return null;
     }
 
+    /** Unity ブリッジの app を選んでいる間だけ、VIEW を Unity パネルにする (body.unity-mode)。 */
     function renderAvailability() {
-        const available = state.hasBridge && state.appId;
-        elements.unavailable.hidden = available;
-        elements.content.hidden = !available;
+        document.body.classList.toggle("unity-mode", Boolean(state.hasBridge && state.appId));
+    }
+
+    /** 観戦中は Play / Stop などの操作を押せなくする (サーバーも 409 で拒否する)。 */
+    function setOperable(operable) {
+        state.operable = operable;
+        elements.actions.forEach((button) => { button.disabled = !operable; });
     }
 
     function renderBridge(bridge, isOk) {
@@ -252,7 +256,7 @@ export function createUnityPanel({ apiFetch, getAppId }) {
     }
 
     async function runAction(button) {
-        if (!state.hasBridge || !state.appId) return;
+        if (!state.hasBridge || !state.appId || !state.operable) return;
         const action = button.dataset.unityAction;
         let body;
         if (action === "publish-capture") {
@@ -268,11 +272,13 @@ export function createUnityPanel({ apiFetch, getAppId }) {
                 body,
             });
             renderBridge(result.bridge, response.ok);
-            setActionStatus(response.ok ? "Request accepted" : `Request failed (HTTP ${response.status})`);
+            setActionStatus(response.ok ? "Request accepted"
+                : response.status === 409 ? "観戦中のため操作できません"
+                : `Request failed (HTTP ${response.status})`);
         } catch {
             setActionStatus("Request interrupted while Unity reloads");
         } finally {
-            button.disabled = false;
+            button.disabled = !state.operable;
         }
     }
 
@@ -280,5 +286,5 @@ export function createUnityPanel({ apiFetch, getAppId }) {
         elements.status.textContent = message;
     }
 
-    return { setApp, setActive };
+    return { setApp, setActive, setOperable };
 }

@@ -6,6 +6,10 @@
  * - クライアントから来た key/click/button は input forwarder に渡る
  *
  * 1 接続が複数 appId に subscribe してもよい (`Set<string>` で持つ)。
+ *
+ * 入力 (key/click/pointer/button) は app の操作権を持つ接続だけが送れる。誰も持って
+ * いなければ最初の入力で操作権を取り、他の接続は観戦者として入力を無視される
+ * (src/input/control-lease.ts)。
  * 認証は `?token=` で渡された Cernere JWT を将来的に verify する。MVP では
  * `CUSTOS_OPEN=1` のときに完全オープン、未設定なら token 必須 (verify は stub)。
  */
@@ -26,6 +30,7 @@ import type { PlayLogRecorder } from "../playlog/playlog-recorder.js";
 import { isPointerMessage } from "./pointer-message.js";
 import { getCernereAuth, type VerifiedUser } from "../auth/cernere-auth.js";
 import type { ScreenshotStreamer, ScreenshotFrame } from "../capture/screenshot-stream.js";
+import type { ControlLease } from "../input/control-lease.js";
 
 const log = childLogger("ws");
 
@@ -42,6 +47,8 @@ export interface WsBrokerDeps {
     streamer:   ScreenshotStreamer;
     /** 行動ログ。未指定なら記録しない。 */
     playLog?:   PlayLogRecorder;
+    /** 遠隔プレイの操作権。全ポートの broker と REST で共有する。 */
+    control:    ControlLease;
 }
 
 export function attachWebSocketBroker(
@@ -66,6 +73,7 @@ export function attachWebSocketBroker(
         };
         sessions.set(session.id, session);
         log.info({ sessionId: session.id, userId: user.id }, "ws connected");
+        send(ws, { type: "welcome", clientId: session.id });
 
         ws.on("message", (data, isBinary) => {
             if (isBinary) return;   // バイナリ未使用
@@ -86,10 +94,20 @@ export function attachWebSocketBroker(
             // 切断 session が持っていた auto-stream 購読を一括 release。
             deps.streamer.releaseAll(session.id);
             deps.playLog?.closeSession(session.id, "disconnect");
+            deps.control.releaseAll(session.id);
             sessions.delete(session.id);
             log.info({ sessionId: session.id }, "ws disconnected");
         });
     });
+
+    // ── 操作権の変化を、その app を見ている全接続へ (接続ごとに役割が違う) ──
+    const onControlChanged = (appId: string) => {
+        for (const s of sessions.values()) {
+            if (s.appIds.has(appId)) send(s.ws, { type: "control", appId, role: deps.control.roleOf(appId, s.id) });
+        }
+    };
+    deps.control.on("changed", onControlChanged);
+    wss.on("close", () => deps.control.off("changed", onControlChanged));
 
     // ── registry / runner からの broadcast ──
     deps.registry.on("status-changed", (appId: string, status: AppStatus) => {
@@ -139,7 +157,7 @@ export function attachWebSocketBroker(
 async function handleClient(
     session: Session,
     msg: ClientMessage,
-    { registry, streamer, playLog }: WsBrokerDeps,
+    { registry, streamer, playLog, control }: WsBrokerDeps,
 ): Promise<void> {
     switch (msg.type) {
         case "subscribe": {
@@ -151,6 +169,7 @@ async function handleClient(
             session.appIds.add(msg.appId);
             const status = registry.getStatus(msg.appId);
             if (status) send(session.ws, { type: "hello", appId: msg.appId, status });
+            send(session.ws, { type: "control", appId: msg.appId, role: control.roleOf(msg.appId, session.id) });
             // capture / inAppBridge 持ちの app は自動 stream を開始 (refcount)。
             streamer.acquire(cfg, session.id);
             return;
@@ -159,11 +178,25 @@ async function handleClient(
             session.appIds.delete(msg.appId);
             streamer.release(msg.appId, session.id);
             playLog?.closeSessionApp(session.id, msg.appId, "unsubscribe");
+            control.release(msg.appId, session.id);
+            return;
+        }
+        case "control": {
+            if (!session.appIds.has(msg.appId)) return;
+            if (msg.want) {
+                // 取れなかった (他の接続がプレイ中) ときは、観戦者であることを本人に返す。
+                if (!control.acquire(msg.appId, session.id)) {
+                    send(session.ws, { type: "control", appId: msg.appId, role: "spectator" });
+                }
+            } else {
+                control.release(msg.appId, session.id);
+            }
             return;
         }
         case "key": {
             const cfg = registry.getConfig(msg.appId);
             if (!cfg || !session.appIds.has(msg.appId)) return;
+            if (!control.acquire(msg.appId, session.id)) return;   // 観戦中の入力は捨てる
             if (cfg.input.allowKeyboard) {
                 playLog?.recordInput(session.id, session.user.id, msg.appId, { device: "key", key: msg.key, down: msg.down });
             }
@@ -173,6 +206,7 @@ async function handleClient(
         case "click": {
             const cfg = registry.getConfig(msg.appId);
             if (!cfg || !session.appIds.has(msg.appId)) return;
+            if (!control.acquire(msg.appId, session.id)) return;   // 観戦中の入力は捨てる
             await sendClick(cfg, msg.x, msg.y, msg.button);
             return;
         }
@@ -183,6 +217,7 @@ async function handleClient(
             }
             const cfg = registry.getConfig(msg.appId);
             if (!cfg || !session.appIds.has(msg.appId)) return;
+            if (!control.acquire(msg.appId, session.id)) return;   // 観戦中の入力は捨てる
             if (cfg.input.allowMouse) {
                 playLog?.recordInput(session.id, session.user.id, msg.appId, {
                     device: "pointer", x: msg.x, y: msg.y, button: msg.button, phase: msg.phase,
@@ -194,6 +229,7 @@ async function handleClient(
         case "button": {
             const cfg = registry.getConfig(msg.appId);
             if (!cfg || !session.appIds.has(msg.appId)) return;
+            if (!control.acquire(msg.appId, session.id)) return;   // 観戦中の入力は捨てる
             const btn = cfg.input.buttons.find((b) => labelToId(b.label) === msg.id);
             if (!btn) {
                 send(session.ws, { type: "error", message: `unknown button: ${msg.id}` });

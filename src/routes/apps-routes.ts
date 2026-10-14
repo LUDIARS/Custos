@@ -103,6 +103,9 @@ export function redact(cfg: import("../config/apps-config.js").AppConfig) {
         // /api/unity/:appId/* 経由でしか触らないので接続先を知る必要がなく、
         // 出せば loopback 前提の内部アドレスを表面に晒すだけになる。
         hasUnityBridge: cfg.inAppBridge?.kind === "unity",
+        // WebRTC の映像源 (デスクトップキャプチャかアプリ内ブリッジ) があるか。VIEW はこれが
+        // true の app を選んだ時点で自動接続する。
+        hasVideo:    Boolean(cfg.capture || cfg.inAppBridge),
         capture:     cfg.capture
             ? { type: cfg.capture.type, fps: cfg.capture.fps }
             : null,

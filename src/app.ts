@@ -26,6 +26,7 @@ import { getResolvedEncoder } from "./capture/ffmpeg-pipeline.js";
 import { createFarmRoutes } from "./routes/farm-routes.js";
 import { createPlayLogRoutes } from "./routes/playlog-routes.js";
 import type { FarmRuntime } from "./farm/runtime.js";
+import type { ControlLease } from "./input/control-lease.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -34,12 +35,14 @@ export interface AppDeps {
     runner:   AppsRunner;
     broker:   WebRTCBroker;
     prefs:    RuntimeStreamPrefs;
+    /** 遠隔プレイの操作権。WS broker と共有する。 */
+    control:  ControlLease;
     farm?: FarmRuntime | undefined;
     /** 行動ログの置き場所。 */
     playLogDir: string;
 }
 
-export function buildApp({ registry, runner, broker, prefs, farm, playLogDir }: AppDeps) {
+export function buildApp({ registry, runner, broker, prefs, control, farm, playLogDir }: AppDeps) {
     const app = new Hono();
 
     app.use("*", honoLogger());
@@ -81,7 +84,7 @@ export function buildApp({ registry, runner, broker, prefs, farm, playLogDir }: 
     // /api/unity/* — Unity ブリッジ (loopback:17778) への薄いプロキシ。
     // ブリッジは loopback 固定なので、遠隔からはここを経由するしかない。
     app.use("/api/unity/*", cernereAuthMiddleware());
-    app.route("/api/unity", createUnityRoutes({ listConfigs: () => registry.listConfigs() }));
+    app.route("/api/unity", createUnityRoutes({ listConfigs: () => registry.listConfigs(), control }));
 
     // /api/playlogs/* — 遠隔プレイの行動ログ (Commentarii の人間プレイ取り込み元)。
     app.use("/api/playlogs/*", cernereAuthMiddleware());

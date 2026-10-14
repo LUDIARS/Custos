@@ -99,57 +99,21 @@ button.ghost { background: transparent; border-color: var(--border); color: var(
   50%      { box-shadow: 0 0 0 6px rgba(119, 216, 143, 0); }
 }
 
-/* ─── main tabs (VIEW / LOG / TEST) ─── */
-.main-tabs {
-  display: flex; align-items: center;
-  background: var(--bg-alt);
-  border-bottom: 1px solid var(--border);
-  padding: 0 12px;
-  flex: 0 0 auto;
+/* 操作権の表示 (player / spectator)。free のときは隠す。 */
+.role-badge {
+  padding: 4px 10px; border-radius: 999px; font-size: 12px;
+  border: 1px solid var(--border); letter-spacing: 0.04em;
 }
-.main-tab {
-  background: transparent;
-  border: none;
-  padding: 8px 18px;
-  color: var(--fg-dim);
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; font-size: 12px;
-  cursor: pointer;
-}
-.main-tab.active { color: var(--fg); border-bottom-color: var(--accent); }
-.main-tabs-spacer { flex: 1 1 auto; }
+.role-badge[data-role="player"]    { color: var(--ok);   border-color: var(--ok); }
+.role-badge[data-role="spectator"] { color: var(--warn); border-color: var(--warn); }
 
-/* ─── main layout (タブパネルが中身を担当) ─── */
-.layout {
-  flex: 1 1 auto;
-  display: flex; flex-direction: column;
-  padding: 10px 18px;
-  min-height: 0;
-  overflow: hidden;
-}
-.main-panel {
-  display: none;
-  flex: 1 1 auto;
-  min-height: 0;
-}
-.main-panel.active {
-  display: flex; flex-direction: column;
-}
-
-/* ─── Unity panel ───────────────────────────── */
-.unity-unavailable, .unity-panel {
-  flex: 1 1 auto;
-  min-height: 0;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-.unity-unavailable { display: grid; place-items: center; color: var(--fg-dim); }
-.unity-panel { display: grid; grid-template-rows: auto auto minmax(0, 1fr) minmax(120px, 30%); overflow: hidden; }
-.unity-header, .unity-actions, .unity-console-toolbar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
+/* ─── Unity パネル (VIEW の中。body.unity-mode のときだけ出す) ───────── */
+.unity-only { display: none !important; }
+body.unity-mode .unity-only { display: flex !important; }
+.unity-strip { flex-direction: column; flex: 0 0 auto; }
+.unity-header, .unity-actions, .unity-console-toolbar { display: flex; align-items: center; gap: 10px; padding: 6px 10px; }
 .unity-header, .unity-actions { border-bottom: 1px solid var(--border); }
-.unity-header { background: var(--bg-alt); }
+.unity-header { background: var(--bg-alt); flex-wrap: wrap; }
 .unity-bridge { color: var(--fg-dim); font-size: 12px; }
 .unity-bridge::before { content: "● "; }
 .unity-bridge[data-state="up"] { color: var(--ok); }
@@ -157,17 +121,22 @@ button.ghost { background: transparent; border-color: var(--border); color: var(
 .unity-bridge[data-state="down"] { color: var(--fg-dim); }
 .unity-header #unityScene { margin-left: auto; color: var(--fg-dim); font-size: 12px; }
 .unity-actions { flex-wrap: wrap; }
+.unity-actions button { padding: 4px 10px; }
 .unity-action-status { color: var(--fg-dim); font-size: 12px; }
-.unity-workspace { display: grid; grid-template-columns: minmax(220px, 32%) 1fr; min-height: 0; }
-.unity-hierarchy-pane { min-height: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
-.unity-hierarchy-pane h2 { margin: 0; padding: 8px 12px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+.unity-hierarchy-pane {
+  flex-direction: column; flex: 0 0 clamp(160px, 26%, 320px);
+  min-height: 0; border-right: 1px solid var(--border);
+}
+.unity-hierarchy-pane h2 { margin: 0; padding: 6px 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
 .unity-hierarchy, .unity-console { overflow: auto; font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 12px; }
-.unity-hierarchy { padding: 4px; color: var(--fg-dim); }
+.unity-hierarchy { padding: 4px; color: var(--fg-dim); flex: 1 1 auto; }
 .unity-hierarchy-row { display: block; width: 100%; border: 0; border-radius: 3px; padding-block: 3px; text-align: left; color: var(--fg); }
 .unity-hierarchy-row.selected { background: var(--bg-elev); color: var(--accent); }
 .unity-truncated { margin: 0 8px 6px; color: var(--warn); font-size: 11px; }
-.unity-view-notice { display: grid; place-items: center; color: var(--fg-faint); text-align: center; padding: 16px; }
-.unity-console-pane { min-height: 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; }
+.unity-console-pane {
+  flex-direction: column; flex: 0 0 clamp(96px, 26%, 260px);
+  min-height: 0; border-top: 1px solid var(--border);
+}
 .unity-console-toolbar { border-bottom: 1px solid var(--border); }
 .unity-console-toolbar button { padding: 3px 8px; font-size: 11px; }
 .unity-console-toolbar button.active { border-color: var(--accent); color: var(--accent); }
@@ -176,30 +145,19 @@ button.ghost { background: transparent; border-color: var(--border); color: var(
 .unity-console-line.error { color: var(--danger); }
 .unity-console-line.warn { color: var(--warn); }
 .unity-console-line.copyable { cursor: copy; text-decoration: underline dotted; }
-@media (max-width: 700px) {
-  .unity-workspace { grid-template-columns: 1fr; }
-  .unity-view-notice { display: none; }
-  .unity-hierarchy-pane { border-right: 0; }
-}
 
-/* VIEW タブの中身: stream を上、virtual keys を下 (要件: 仮想キー領域広め 240px) */
-.view-grid {
-  flex: 1 1 auto;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) 260px;
-  gap: 10px;
-  min-height: 0;
-}
+/* ─── VIEW の中身 ─── */
+.view-body { display: flex; flex-direction: column; }
+.view-main { flex: 1 1 auto; display: flex; min-height: 0; }
 
 /* ─── stream ─── */
 .stream-area {
   display: flex; flex-direction: column;
   background: #000;
-  border: 1px solid var(--border);
-  border-radius: 8px;
   overflow: hidden;
   position: relative;
   min-height: 0;
+  flex: 1 1 auto;
 }
 .stream-frame {
   flex: 1 1 auto;
@@ -231,82 +189,18 @@ button.ghost { background: transparent; border-color: var(--border); color: var(
 }
 .ph-title { font-size: 16px; letter-spacing: 0.04em; margin-bottom: 6px; }
 .ph-hint  { font-size: 12px; color: var(--fg-faint); }
-
-/* ─── virtual keys (広め) ─── */
-.virtual-keys {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  display: flex; flex-direction: column;
-  overflow: hidden;
-  box-shadow: var(--shadow);
+/* 映像の上ではブラウザの拡大縮小・スクロールを止め、タップを全部マウス操作に回す。 */
+.stream-frame { touch-action: none; }
+.spectator-banner {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+  padding: 4px 12px; border-radius: 999px; font-size: 12px;
+  background: rgba(0,0,0,0.65); color: var(--warn); border: 1px solid var(--warn);
+  pointer-events: none;
 }
-.vk-toolbar {
-  display: flex; align-items: center; gap: 10px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-alt);
-  flex-wrap: wrap;
-}
-.vk-label {
-  text-transform: uppercase; letter-spacing: 0.06em;
-  font-size: 11px; color: var(--fg-dim); font-weight: 600;
-}
-.vk-hint  { color: var(--fg-faint); font-size: 11px; }
-.vk-toolbar-spacer { flex: 1 1 auto; }
-.capture-mode-label {
-  display: inline-flex; align-items: center; gap: 6px;
-  color: var(--fg-dim); font-size: 11px;
-  text-transform: uppercase; letter-spacing: 0.04em;
-}
-.capture-mode-label select {
-  background: var(--bg-card); color: var(--fg);
-  border: 1px solid var(--border); border-radius: 3px;
-  padding: 3px 6px; font: inherit; font-size: 12px;
-}
-.capture-action {
-  font-size: 12px; padding: 4px 10px; text-decoration: none;
-}
-.capture-action[hidden] { display: none; }
-
-.vk-grid {
-  flex: 1 1 auto;
-  padding: 12px;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 10px;
-  align-content: start;
-  overflow: auto;
-}
-.vk-button {
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--fg);
-  padding: 14px 10px;
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-  user-select: none;
-  position: relative;
-  transition: transform 0.05s, border-color 0.15s, background 0.1s;
-  min-height: 64px;
-}
-.vk-button:hover:not(:disabled) { border-color: var(--accent); }
-.vk-button:active { transform: translateY(1px); background: #2a3556; }
-.vk-button[data-action="kill"]  { border-color: var(--kill); color: var(--kill); }
-.vk-button .vk-key-hint {
-  display: block; margin-top: 4px;
-  font-size: 10px; color: var(--fg-faint); font-weight: 400;
-  text-transform: uppercase; letter-spacing: 0.04em;
-}
-.vk-empty {
-  grid-column: 1 / -1;
-  color: var(--fg-faint);
-  text-align: center;
-  padding: 30px 0;
-}
+.rtc-status { color: var(--fg-faint); }
+.rtc-status[data-state="live"]  { color: var(--ok); }
+.rtc-status[data-state="retry"] { color: var(--warn); }
+.vk-empty { color: var(--fg-faint); text-align: center; padding: 24px 8px; }
 
 /* ─── log / test streams ─── */
 .log-stream {
@@ -316,8 +210,7 @@ button.ghost { background: transparent; border-color: var(--border); color: var(
   font-size: 12px;
   color: var(--fg);
   background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  height: 100%;
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-all;
@@ -328,7 +221,6 @@ button.ghost { background: transparent; border-color: var(--border); color: var(
 .log-stream .build  { color: var(--build); }
 .log-stream .run    { color: var(--run); }
 .log-stream .test   { color: var(--test); }
-
 /* ─── footer ─── */
 .app-footer {
   display: flex; align-items: center; gap: 10px;
@@ -358,7 +250,7 @@ button.ghost { background: transparent; border-color: var(--border); color: var(
 /* ─── settings panel ─── */
 .settings-card {
   max-width: 720px;
-  margin: 16px auto;
+  margin: 0 auto;
   padding: 18px 22px;
   background: var(--bg-alt);
   border: 1px solid var(--border);
@@ -400,149 +292,4 @@ button.ghost { background: transparent; border-color: var(--border); color: var(
   border: 1px solid var(--border); border-radius: 4px;
   padding: 8px 12px; font: inherit; font-size: 12px;
   overflow: auto;
-}
-
-/* ─── virtual gamepad layout ──────────────────────────── */
-.vk-pad {
-  display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(70px, 0.6fr) minmax(140px, 1fr);
-  grid-template-rows: auto auto auto auto;
-  gap: 14px;
-  padding: 14px 12px;
-  align-items: start;
-}
-.vk-zone           { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.vk-zone-label     {
-  font-size: 10px; letter-spacing: 0.12em; color: var(--fg-faint);
-  text-transform: uppercase;
-}
-.vk-zone-shoulder  {
-  grid-column: 1 / -1; grid-row: 1;
-  display: flex; flex-direction: row; justify-content: space-between;
-  padding: 0 8px;
-}
-.vk-shoulder-row   { display: flex; gap: 6px; }
-.vk-zone-dpad      { grid-column: 1; grid-row: 2; }
-.vk-zone-menu      { grid-column: 2; grid-row: 2; align-self: center; }
-.vk-zone-actions   { grid-column: 3; grid-row: 2; }
-.vk-zone-stick     { grid-column: 1; grid-row: 3; }
-.vk-zone-extras    {
-  grid-column: 1 / -1; grid-row: 4;
-  display: flex; flex-direction: row; flex-wrap: wrap; gap: 8px; justify-content: center;
-}
-
-/* + (D-pad / stick) クラスタ — 3×3 grid の中で十字型に配置 */
-.vk-plus {
-  display: grid;
-  grid-template:
-    ".    up    .   "
-    "left .     right"
-    ".    down  .   " / 1fr 1fr 1fr;
-  gap: 4px;
-  width: 144px; height: 144px;
-}
-.vk-zone-stick .vk-plus { width: 132px; height: 132px; }
-
-/* ◇ (action diamond) — 同じ 3×3 grid */
-.vk-diamond {
-  display: grid;
-  grid-template:
-    ".  y  . "
-    "x  .  b "
-    ".  a  . " / 1fr 1fr 1fr;
-  gap: 4px;
-  width: 144px; height: 144px;
-}
-
-/* ボタン本体 */
-.vk-btn {
-  position: relative;
-  display: inline-flex; align-items: center; justify-content: center;
-  min-width: 48px; min-height: 44px;
-  padding: 6px 10px;
-  background: var(--bg-alt);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  font: 600 13px/1 system-ui, sans-serif;
-  cursor: pointer;
-  user-select: none;
-  -webkit-user-select: none;
-  transition: transform 60ms ease, background 80ms ease, box-shadow 80ms ease;
-}
-.vk-btn:hover:not(:disabled):not(.placeholder) { border-color: var(--accent); }
-.vk-btn.active, .vk-btn:active {
-  transform: translateY(1px);
-  background: #2a3556;
-  box-shadow: inset 0 0 0 1px var(--accent);
-}
-.vk-btn.placeholder {
-  background: transparent;
-  color: var(--fg-faint);
-  border-style: dashed;
-  cursor: default;
-  opacity: 0.4;
-}
-.vk-btn.danger {
-  border-color: var(--kill);
-  color: var(--kill);
-}
-.vk-btn.danger:hover { background: rgba(255,80,80,0.08); }
-
-/* 円形 (D-pad / 方向 / アクション) */
-.vk-btn[data-kind="dir"],
-.vk-btn[data-kind^="act-"] {
-  border-radius: 50%;
-  font-size: 18px;
-  min-width: 0; min-height: 0;
-  width: 100%; height: 100%;
-  padding: 0;
-}
-
-/* Xbox 配色 (controller 慣習に合わせる) */
-.vk-btn[data-kind="act-a"] { color: #98e6a0; border-color: rgba(72,200,120,0.55); }
-.vk-btn[data-kind="act-b"] { color: #f08e8a; border-color: rgba(220,80,80,0.55); }
-.vk-btn[data-kind="act-x"] { color: #8fb4ff; border-color: rgba(80,130,255,0.55); }
-.vk-btn[data-kind="act-y"] { color: #f0d680; border-color: rgba(220,180,80,0.55); }
-.vk-btn[data-kind="act-a"].active { background: rgba(72,200,120,0.18); }
-.vk-btn[data-kind="act-b"].active { background: rgba(220,80,80,0.18); }
-.vk-btn[data-kind="act-x"].active { background: rgba(80,130,255,0.18); }
-.vk-btn[data-kind="act-y"].active { background: rgba(220,180,80,0.18); }
-
-.vk-btn[data-kind="dir"] { font-weight: 700; font-size: 22px; }
-
-.vk-btn[data-kind="menu"] {
-  min-width: 90px;
-  border-radius: 999px;  /* pill */
-}
-
-/* キー文字小ラベル (W / Up 等) */
-.vk-keytag {
-  position: absolute;
-  bottom: 2px; right: 4px;
-  font: 400 9px/1 ui-monospace, Consolas, monospace;
-  color: var(--fg-faint);
-  pointer-events: none;
-}
-.vk-btn[data-kind="dir"] .vk-keytag,
-.vk-btn[data-kind^="act-"] .vk-keytag {
-  bottom: -14px; right: 50%; transform: translateX(50%);
-}
-
-/* 縦が狭いとき (mobile portrait) は 2 段組みにせずスクロールに任せる */
-@media (max-width: 540px) {
-  .vk-pad { grid-template-columns: 1fr 1fr; }
-  .vk-zone-shoulder { grid-column: 1 / -1; }
-  .vk-zone-dpad     { grid-column: 1; grid-row: 2; }
-  .vk-zone-actions  { grid-column: 2; grid-row: 2; }
-  .vk-zone-menu     { grid-column: 1 / -1; grid-row: 3; flex-direction: row; }
-  .vk-zone-stick    { grid-column: 1 / -1; grid-row: 4; }
-  .vk-zone-extras   { grid-column: 1 / -1; grid-row: 5; }
-}
-
-/* vk-grid の既存 auto-fill grid は新ゲームパッドレイアウトと衝突するので、
- * vk-pad を内包しているときだけ block にして全体を vk-pad に任せる。 */
-.vk-grid:has(.vk-pad) {
-  display: block;
-  padding: 0;
 }

@@ -9,7 +9,16 @@
  * 未対応)。
  */
 
-export async function connectWebRTC({ appId, videoEl, apiFetch, onLog }) {
+/**
+ * @param {{
+ *   appId: string,
+ *   videoEl: HTMLVideoElement,
+ *   apiFetch: Function,
+ *   onLog?: (text: string, isError?: boolean) => void,
+ *   onState?: (state: RTCPeerConnectionState) => void,
+ * }} opts onState は接続状態が変わるたびに呼ばれる (切断の検知と再接続に使う)
+ */
+export async function connectWebRTC({ appId, videoEl, apiFetch, onLog, onState }) {
     const pc = new RTCPeerConnection({
         iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
@@ -26,6 +35,7 @@ export async function connectWebRTC({ appId, videoEl, apiFetch, onLog }) {
     pc.onconnectionstatechange = () => {
         onLog?.(`pc state: ${pc.connectionState}`,
             pc.connectionState === "failed" || pc.connectionState === "disconnected");
+        onState?.(pc.connectionState);
     };
 
     // ICE gathering 完了まで待ってから offer を送る。
