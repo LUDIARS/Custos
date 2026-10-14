@@ -197,12 +197,21 @@ export function buildBridgeStreamFfmpegArgs(
     const encA = encoderArgs(enc, meta.fps, bitrateBps);
     return [
         "-loglevel", "warning",
+        // フレームの時刻は「届いた時刻」にする。ブリッジは Play 中しか新しいフレームを作らず、
+        // Edit mode や一時停止の間は 1 秒ごとに直前のフレームを送り直すだけになる。フレーム数で
+        // 時刻を振ると、その間の時間が縮み、フレーム数基準の GOP (`-g`) では keyframe が 24 秒に
+        // 1 回になって、途中から来たブラウザが何も描けない。
+        "-use_wallclock_as_timestamps", "1",
         "-f",         "rawvideo",
         "-pix_fmt",   meta.pixfmt,
         "-s",         `${meta.width}x${meta.height}`,
         "-r",         String(meta.fps),
         "-i",         "pipe:0",
         "-an",
+        // 実時間で 1 秒ごとに keyframe を出す (途中参加の session が 1 秒以内に描き始められる)。
+        "-force_key_frames", "expr:gte(t,n_forced*1)",
+        // 届いたフレームをそのまま出す (足りない間を複製で埋めない)。
+        "-fps_mode",  "passthrough",
         // H.264 (yuv420p) は縦横とも偶数でないとエンコーダが開けない。Game View の大きさは
         // ウインドウ次第で奇数になる (例 603x319) ので、1px 切り詰めて偶数にする。
         "-vf",        "crop=trunc(iw/2)*2:trunc(ih/2)*2",

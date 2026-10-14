@@ -146,6 +146,15 @@ describe("buildBridgeStreamFfmpegArgs", () => {
         expect(vf).toBeLessThan(args.indexOf("-c:v"));
     });
 
+    test("timestamps frames by arrival and forces a keyframe every second of wall time", () => {
+        // Edit mode では 1 秒に 1 フレームしか来ない。フレーム数基準の GOP だと keyframe が 24 秒に 1 回になり、
+        // 途中参加のブラウザが描けなかった。
+        const args = buildBridgeStreamFfmpegArgs(baseMeta, "x264", 4_000_000, 5004, "127.0.0.1", 96);
+        expect(args.indexOf("-use_wallclock_as_timestamps")).toBeLessThan(args.indexOf("-i"));
+        expect(args[args.indexOf("-force_key_frames") + 1]).toBe("expr:gte(t,n_forced*1)");
+        expect(args[args.indexOf("-fps_mode") + 1]).toBe("passthrough");
+    });
+
     test("contains RTP output with correct port and pkt_size=1200", () => {
         const args = buildBridgeStreamFfmpegArgs(baseMeta, "x264", 4_000_000, 5004, "127.0.0.1", 96);
         expect(args).toContain("-f");

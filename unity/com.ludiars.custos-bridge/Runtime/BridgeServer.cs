@@ -4,7 +4,9 @@
 // provider / injector / streamer は interface / 具象クラスを注入して使う。
 //
 // 設計 (spec/unity-bridge.md §4.1):
-//   - 同期 GetContext() loop (スループット要件が低い単一クライアント前提)
+//   - GetContext() loop は受け付けるだけで、処理は ThreadPool に渡す。1 本で順に処理すると、
+//     main thread を待つ要求 (/screenshot 最大 7s、/editor/* など) の後ろに Play / status / key が並び、
+//     Custos の VIEW (WebRTC・静止画・Unity パネルの定期取得) を開いている間は数秒単位で詰まった
 //   - /key は enqueue → 即 200 (fire-and-forget)
 //   - /screenshot は coalescing pending + ManualResetEventSlim でブロック (timeout 7s)
 //   - /stream は専用スレッドに渡して accept loop を空ける (接続中ずっとブロックするため)
@@ -139,11 +141,15 @@ namespace Ludiars.Custos.Bridge
                     return;
                 }
 
-                try { ProcessRequest(ctx); }
-                catch (Exception e)
+                var accepted = ctx;
+                ThreadPool.QueueUserWorkItem(_ =>
                 {
-                    if (_isRunning) Debug.LogError($"[CustosBridge] Process error: {e.Message}");
-                }
+                    try { ProcessRequest(accepted); }
+                    catch (Exception e)
+                    {
+                        if (_isRunning) Debug.LogError($"[CustosBridge] Process error: {e.Message}");
+                    }
+                });
             }
         }
 

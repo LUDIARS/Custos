@@ -55,6 +55,11 @@ RTP datagram を購読中の全 WebRTC session に配る。
   `/rtc/offer` をその理由で失敗させる (起動の成否を spawn / error で待つ)。起動後に error を出したら全 session を閉じる。
 - ブリッジの映像 (Game View) は奇数サイズになりうる (例 603x319)。H.264 (yuv420p) は偶数しか受け付けないので、
   エンコード前に `crop=trunc(iw/2)*2:trunc(ih/2)*2` で偶数に切り詰める。
+- ブリッジの映像はフレームが届いた時刻をそのまま使い (`-use_wallclock_as_timestamps 1`)、実時間で 1 秒ごとに keyframe を出す
+  (`-force_key_frames expr:gte(t,n_forced*1)`)。Edit mode・一時停止の間はフレームが 1 秒に 1 枚しか来ないので、フレーム数基準の
+  GOP では keyframe が 24 秒に 1 回になり、途中から来たブラウザが何も描けなかった。
+- Unity ブリッジは要求を受け付けるだけで、処理は ThreadPool で並行に行う。1 本で順に処理すると、main thread を待つ要求
+  (`/screenshot` 最大 7 秒、`/editor/*`) の後ろに Play / status / key が並び、VIEW を開いている間は数秒単位で詰まった。
 - Unity ブリッジの `/stream` は、最初のフレームを待つ間から「接続中」として数える (`FrameStreamer`)。Editor / Player の
   フレーム取り込みは接続中のときだけ動くため、フレームが届いてから数えると最初のフレームが作られず必ず 503 になっていた。
 
