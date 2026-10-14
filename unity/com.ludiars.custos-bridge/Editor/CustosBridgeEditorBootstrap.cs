@@ -218,6 +218,10 @@ namespace Ludiars.Custos.Bridge.Editor
                     break;
                 case PlayModeStateChange.EnteredEditMode:
                     Debug.Log("[CustosBridge] Entered EditMode — using SingleCameraRequest provider.");
+#if ENABLE_INPUT_SYSTEM
+                    // 遠隔入力のためにフォーカス無視へ差し替えた Input System の設定を戻す。
+                    Input.RemoteInputFocusPolicy.Restore();
+#endif
                     break;
             }
         }

@@ -65,6 +65,8 @@ namespace Ludiars.Custos.Bridge.Input
             if (pressed.HasValue)
                 _state = _state.WithButton(ToMouseButton(button), pressed.Value);
 
+            // フォーカスが無くても入力がゲームに届くようにする (RemoteInputFocusPolicy 参照)。
+            RemoteInputFocusPolicy.Apply();
             _virtualMouse.MakeCurrent();
             InputSystem.QueueStateEvent(_virtualMouse, _state);
             return true;

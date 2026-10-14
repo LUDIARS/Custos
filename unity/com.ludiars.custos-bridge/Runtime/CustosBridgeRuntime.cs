@@ -107,6 +107,7 @@ namespace Ludiars.Custos.Bridge
 #if ENABLE_INPUT_SYSTEM
                 injector.Shutdown();
                 pointerInjector.Shutdown();
+                Input.RemoteInputFocusPolicy.Restore();
 #endif
             };
         }

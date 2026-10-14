@@ -81,7 +81,12 @@ namespace Ludiars.Custos.Bridge.Input
             // フルステートを毎回 queue する。
             // これにより同時押し (W + Space 等) が正しく表現され、
             // タイミングのズレがあっても次イベントで自己修復する。
+            // フォーカスが無くても入力がゲームに届くようにする (RemoteInputFocusPolicy 参照)。
+            RemoteInputFocusPolicy.Apply();
             _pressedState.Set(key, down);
+            // ゲームが Keyboard.current を読む場合に備えて、仮想キーボードを current にする
+            // (物理キーボードが current のままだと注入した入力が見られない)。
+            _virtualKeyboard.MakeCurrent();
             InputSystem.QueueStateEvent(_virtualKeyboard, _pressedState);
             return true;
         }
