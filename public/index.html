@@ -19,11 +19,14 @@
       <select id="appSelect" aria-label="アプリ選択">
         <option value="">— 起動対象を選択 —</option>
       </select>
-      <button id="btnBuild" class="action build" disabled title="Build → Run を一気に流す (build が無い app は Run のみ)">BOOT</button>
-      <button id="btnRun"   class="action run"   disabled>Run</button>
-      <button id="btnTest"  class="action test"  disabled>Test</button>
-      <button id="btnKill"  class="action kill"  disabled>Kill</button>
-      <span class="status-pill" id="statusPill" data-state="idle">idle</span>
+      <span class="header-actions" id="headerActions">
+        <button id="btnBuild" class="action build" disabled title="Build → Run を一気に流す (build が無い app は Run のみ)">BOOT</button>
+        <button id="btnRun"   class="action run"   disabled>Run</button>
+        <button id="btnTest"  class="action test"  disabled>Test</button>
+        <button id="btnKill"  class="action kill"  disabled>Kill</button>
+      </span>
+      <!-- スマホではこれを押すと操作メニュー (statusMenu) が開く -->
+      <button type="button" class="status-pill" id="statusPill" data-state="idle" aria-expanded="false" aria-controls="statusMenu">idle</button>
       <span class="role-badge" id="roleBadge" hidden></span>
     </div>
     <!-- ウインドウの出し入れ。PC はフローティングウインドウ、スマホは下から出るシート。 -->
@@ -36,6 +39,12 @@
       <button type="button" class="window-toggle ghost desktop-only" id="btnResetLayout" title="ウインドウの配置を既定に戻す">⟲</button>
     </nav>
   </header>
+
+  <!-- スマホ用の操作メニュー。BOOT 等と Unity の操作・状態をここへ移して表示する (status-menu.js) -->
+  <div class="status-menu" id="statusMenu" hidden>
+    <div class="status-menu-section" id="statusMenuActions"></div>
+    <div class="status-menu-section" id="statusMenuUnity"></div>
+  </div>
 
   <main class="desk" id="desk">
 
@@ -50,7 +59,7 @@
       </header>
       <div class="fw-body view-body">
         <!-- Unity パネル上段 (body.unity-mode のときだけ表示) -->
-        <div class="unity-only unity-strip">
+        <div class="unity-only unity-strip" id="unityStrip">
           <header class="unity-header">
             <span id="unityBridge" class="unity-bridge" data-state="down">reloading / offline</span>
             <strong id="unityVersion">Unity</strong>
@@ -109,7 +118,6 @@
     <section class="fw" data-window="pad" aria-label="PAD">
       <header class="fw-titlebar">
         <span class="fw-title">PAD</span>
-        <button type="button" class="fw-option" id="padModeToggle" title="方向入力をスティック / 十字キーで切り替える">STICK</button>
         <button type="button" class="fw-btn" data-fw-minimize title="最小化">–</button>
         <button type="button" class="fw-btn" data-fw-close title="閉じる">×</button>
       </header>

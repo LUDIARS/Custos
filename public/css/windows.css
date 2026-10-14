@@ -111,3 +111,31 @@ body.layout-mobile .fw[data-window="settings"] {
 body.layout-mobile .fw[data-window="logs"] .fw-btn[data-fw-close],
 body.layout-mobile .fw[data-window="tests"] .fw-btn[data-fw-close],
 body.layout-mobile .fw[data-window="settings"] .fw-btn[data-fw-close] { display: inline-block; }
+
+/* ─── ステータスと操作メニュー ─── */
+.header-actions { display: inline-flex; gap: 8px; flex-wrap: wrap; }
+button.status-pill { cursor: default; font: inherit; font-size: 12px; }
+/* PC ではメニューを使わない (ヘッダと VIEW に元から並んでいる) */
+.status-menu[hidden] { display: none; }
+body.layout-desktop .status-menu { display: none; }
+
+/* スマホ: ステータスを押すとヘッダの下にフローティングで開く */
+body.layout-mobile button.status-pill { cursor: pointer; }
+body.layout-mobile button.status-pill::after { content: " ▾"; }
+body.layout-mobile button.status-pill.menu-open::after { content: " ▴"; }
+body.layout-mobile .status-menu {
+  position: fixed; left: 8px; right: 8px; top: 52px;
+  z-index: 70;
+  display: flex; flex-direction: column; gap: 8px;
+  max-height: 70vh; overflow: auto;
+  padding: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.55);
+}
+body.layout-mobile .status-menu .header-actions { display: flex; }
+body.layout-mobile .status-menu .header-actions button { flex: 1 1 0; padding: 8px 0; }
+body.layout-mobile .status-menu .unity-strip { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+body.layout-mobile .status-menu .unity-actions button { flex: 1 1 40%; padding: 8px 0; }
+body.layout-mobile .status-menu-section:empty { display: none; }

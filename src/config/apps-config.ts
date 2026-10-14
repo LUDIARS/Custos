@@ -76,9 +76,48 @@ const buttonSchema = z.object({
     message: "button must specify exactly one of `key` or `action`",
 });
 
+/** 上下左右のキー。 */
+const directionKeysSchema = z.object({
+    up:    z.string().min(1),
+    down:  z.string().min(1),
+    left:  z.string().min(1),
+    right: z.string().min(1),
+});
+
+/** アナログスティック。press はスティックのダブルタップで送る押し込み (L3 / R3)。 */
+const stickSchema = directionKeysSchema.extend({
+    press: z.string().min(1).optional(),
+});
+
+/**
+ * バーチャルパッドの明示定義 (spec/feature/floating-ui-and-shared-video.md §1.3)。
+ * 書いた部品だけを表示する。無ければ buttons から位置を推測する従来の表示になる。
+ */
+const padSchema = z.object({
+    leftStick:  stickSchema.optional(),
+    rightStick: stickSchema.optional(),
+    dpad:       directionKeysSchema.optional(),
+    face: z.object({
+        a: z.string().min(1).optional(),
+        b: z.string().min(1).optional(),
+        x: z.string().min(1).optional(),
+        y: z.string().min(1).optional(),
+    }).optional(),
+    shoulders: z.object({
+        lb: z.string().min(1).optional(),
+        rb: z.string().min(1).optional(),
+        lt: z.string().min(1).optional(),
+        rt: z.string().min(1).optional(),
+    }).optional(),
+    /** View / Menu などの小さいボタン。action (screenshot など) も置ける。 */
+    menu: z.array(buttonSchema).default([]),
+});
+
 const inputSchema = z.object({
     /** バーチャルキー定義。Frontend で 1 つ 1 つボタンとして表示する。 */
     buttons: z.array(buttonSchema).default([]),
+    /** パッドの明示定義。あれば buttons より優先してパッドに使う。 */
+    pad:     padSchema.optional(),
     allowKeyboard: z.boolean().default(true),
     /** スマホのタップ操作を前提にするため既定で許可する。明示的に false の app だけ止める。 */
     allowMouse:    z.boolean().default(true),

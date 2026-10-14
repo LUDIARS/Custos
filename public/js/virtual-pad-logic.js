@@ -128,3 +128,52 @@ function normalizeAngle(angle) {
     while (a < -Math.PI) a += Math.PI * 2;
     return a;
 }
+
+/** スティックをこの間隔 (ms) 以内に 2 回押したら押し込み (L3 / R3) とみなす。 */
+export const DOUBLE_TAP_MS = 300;
+
+/**
+ * パッドに出す部品の定義。input.pad があればそれを使い、無ければ buttons から位置を推測して
+ * 同じ形にする。定義の無い部品は null (空き枠は出さない)。
+ * @param {{buttons?: Array<object>, pad?: object} | undefined} input
+ * @returns {{leftStick: object|null, rightStick: object|null, dpad: object|null,
+ *            face: object|null, shoulders: object|null, menu: Array<object>}}
+ */
+export function padDefinition(input) {
+    if (input?.pad) {
+        const pad = input.pad;
+        return {
+            leftStick:  pad.leftStick ?? null,
+            rightStick: pad.rightStick ?? null,
+            dpad:       pad.dpad ?? null,
+            face:       nonEmpty(pad.face),
+            shoulders:  nonEmpty(pad.shoulders),
+            menu:       pad.menu ?? [],
+        };
+    }
+    const slots = layoutPadButtons(input?.buttons ?? []);
+    const keysOf = (zone) => Object.fromEntries(Object.entries(zone).filter(([, b]) => b?.key).map(([k, b]) => [k, b.key]));
+    const directions = (zone) => {
+        const keys = keysOf(zone);
+        return ["up", "down", "left", "right"].some((dir) => keys[dir]) ? keys : null;
+    };
+    return {
+        leftStick:  directions(slots.stick),
+        rightStick: null,
+        dpad:       directions(slots.dpad),
+        face:       nonEmpty(keysOf(slots.actions)),
+        shoulders:  nonEmpty(keysOf(slots.shoulder)),
+        menu:       [...slots.menu, ...slots.extras],
+    };
+}
+
+/** 直前の押下からの経過がダブルタップの間隔以内か。 */
+export function isDoubleTap(lastTapAt, now, intervalMs = DOUBLE_TAP_MS) {
+    return lastTapAt !== null && now - lastTapAt <= intervalMs;
+}
+
+function nonEmpty(group) {
+    if (!group) return null;
+    const entries = Object.entries(group).filter(([, key]) => typeof key === "string" && key);
+    return entries.length > 0 ? Object.fromEntries(entries) : null;
+}

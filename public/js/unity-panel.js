@@ -8,7 +8,11 @@ import {
 
 const POLL_INTERVAL_MS = 2_000;
 
-export function createUnityPanel({ apiFetch, getAppId }) {
+/**
+ * @param {{ apiFetch: Function, getAppId: () => string|null, onPlayingChange?: (playing: boolean) => void }} deps
+ *   onPlayingChange: 状態を取るたびに Play 中かどうかを知らせる (スマホの操作メニューの開閉に使う)
+ */
+export function createUnityPanel({ apiFetch, getAppId, onPlayingChange = () => {} }) {
     const elements = {
         bridge: document.getElementById("unityBridge"),
         version: document.getElementById("unityVersion"),
@@ -101,6 +105,7 @@ export function createUnityPanel({ apiFetch, getAppId }) {
             elements.version.textContent = data.unityVersion ? `Unity ${data.unityVersion}` : "Unity";
             elements.mode.textContent = data.isCompiling ? "Compiling" : data.isPlaying ? "Playing" : "Edit mode";
             elements.scene.textContent = data.activeScene || "No active scene";
+            onPlayingChange(data.isPlaying === true);
         } catch {
             renderBridge("down", false);
         }

@@ -6,22 +6,24 @@
 .pad-body { padding: 8px 10px 14px; }
 .vk-pad {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: 1fr 1fr;
   grid-template-areas:
-    "shoulder shoulder shoulder"
-    "dir      menu     actions"
-    "extras   extras   extras";
-  gap: 10px;
+    "top         top"
+    "mid-left    mid-right"
+    "bottom-left bottom-right";
+  gap: 10px 8px;
   align-items: center;
   justify-items: center;
 }
 .vk-zone          { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.vk-zone-shoulder { grid-area: shoulder; width: 100%; flex-direction: row; justify-content: space-between; }
+.vk-zone-top      { grid-area: top; width: 100%; flex-direction: row; justify-content: space-between; gap: 6px; }
+.vk-mid-left      { grid-area: mid-left; }
+.vk-mid-right     { grid-area: mid-right; }
+.vk-bottom-left   { grid-area: bottom-left; }
+.vk-bottom-right  { grid-area: bottom-right; }
 .vk-shoulder-row  { display: flex; gap: 6px; }
-.vk-zone-dir      { grid-area: dir; }
-.vk-zone-menu     { grid-area: menu; }
-.vk-zone-actions  { grid-area: actions; }
-.vk-zone-extras   { grid-area: extras; flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.vk-menu-row      { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.vk-btn[data-kind="shoulder"] { min-width: 52px; }
 
 /* 十字 (D-pad) と ABXY は同じ 3×3 grid */
 .vk-plus, .vk-diamond {
@@ -63,6 +65,8 @@
   transition: transform 60ms ease-out;
 }
 .vk-stick.active .vk-stick-knob { transition: none; background: #2a3556; }
+.vk-stick-knob { display: grid; place-items: center; font: 600 10px/1 system-ui, sans-serif; color: var(--fg-faint); }
+.vk-stick.pressed .vk-stick-knob { background: var(--accent); color: var(--bg); }
 .vk-stick-dir {
   position: absolute; font-size: 10px; color: var(--fg-faint); pointer-events: none;
 }
@@ -132,6 +136,10 @@
 /* 観戦中はパッドを押せない */
 body[data-role="spectator"] .vk-pad { opacity: 0.4; pointer-events: none; }
 
-/* スマホ: 肩とメニューを詰めて、左右の操作部を大きく */
-body.layout-mobile .vk-pad { gap: 6px; }
+/* スマホ: 3 段を縦画面に収める (スティック・ボタンは画面幅に合わせて縮む) */
+body.layout-mobile .vk-pad { gap: 6px 4px; }
+body.layout-mobile .vk-stick,
+body.layout-mobile .vk-plus,
+body.layout-mobile .vk-diamond { width: clamp(96px, 30vw, 140px); }
+body.layout-mobile .vk-btn[data-kind="shoulder"] { min-width: 40px; min-height: 36px; padding: 4px 6px; }
 body.layout-mobile .vk-btn[data-kind="menu"] { min-width: 56px; padding: 4px 8px; }

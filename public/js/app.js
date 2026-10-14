@@ -19,6 +19,7 @@ import { createPlayInput } from "/js/play-input.js";
 import { createUnityPanel } from "/js/unity-panel.js";
 import { createSettingsPanel } from "/js/settings-panel.js";
 import { createWsClient } from "/js/ws-client.js";
+import { createStatusMenu } from "/js/status-menu.js";
 
 const $ = (id) => document.getElementById(id);
 const appSelect = $("appSelect");
@@ -33,6 +34,7 @@ const state = {
     appId: null,
     config: null,
     lifecycle: null,
+    unityPlaying: null,   // Unity ブリッジの app で Play 中か (null = まだ分からない)
     boot: { pending: false, appId: null },   // BOOT (build → run) チェイン状態
 };
 
@@ -41,8 +43,22 @@ const logView = createLogView({ logEl: $("logStream"), testEl: $("testStream") }
 setApiLogger(logView.append);
 const log = (text, isError = false) => logView.meta(`${text}\n`, isError);
 
+const statusMenu = createStatusMenu({
+    pill: $("statusPill"),
+    menu: $("statusMenu"),
+    actionsSlot: $("statusMenuActions"),
+    unitySlot: $("statusMenuUnity"),
+    headerActions: $("headerActions"),
+    unityStrip: $("unityStrip"),
+});
+
 let windowManager = null;
-const layoutMode = createLayoutMode({ onChange: () => windowManager?.render() });
+const layoutMode = createLayoutMode({
+    onChange: (mobile) => {
+        statusMenu.setMobile(mobile);
+        windowManager?.render();
+    },
+});
 windowManager = createWindowManager({
     desk: $("desk"),
     isMobile: () => layoutMode.isMobile(),
@@ -90,7 +106,6 @@ const sendKey = (key, down) => {
 
 const pad = createVirtualPad({
     root: $("padRoot"),
-    modeToggle: $("padModeToggle"),
     sendKey,
     onAction: (action) => {
         if (action === "kill") apiAction("kill");
@@ -112,7 +127,14 @@ const playInput = createPlayInput({
     send: (msg) => ws.send(msg),
 });
 
-const unityPanel = createUnityPanel({ apiFetch, getAppId: () => state.appId });
+const unityPanel = createUnityPanel({
+    apiFetch,
+    getAppId: () => state.appId,
+    onPlayingChange: (playing) => {
+        state.unityPlaying = playing;
+        updateGameRunning();
+    },
+});
 const settingsPanel = createSettingsPanel({ apiFetch });
 
 // ─── 起動 ───────────────────────────────────────
@@ -172,6 +194,7 @@ async function onAppChange() {
     state.appId = id;
     state.config = state.apps.find((a) => a.config.id === id)?.config ?? null;
     state.lifecycle = null;
+    state.unityPlaying = null;
     control.setApp(id);
     unityPanel.setApp(state.config);
     pad.setApp(state.config);
@@ -195,6 +218,16 @@ function applyStatus(status) {
     if (status.lifecycle === "running" && state.lifecycle !== "running") stream.retryNow();
     state.lifecycle = status.lifecycle;
     updateActionButtons();
+    updateGameRunning();
+}
+
+/**
+ * ゲームが動いているか (スマホの操作メニューの開閉に使う)。Unity ブリッジの app は Play 中か、
+ * それ以外は run が動いているか。
+ */
+function updateGameRunning() {
+    const running = state.config?.hasUnityBridge ? state.unityPlaying === true : state.lifecycle === "running";
+    statusMenu.setGameRunning(running);
 }
 
 function updateActionButtons() {

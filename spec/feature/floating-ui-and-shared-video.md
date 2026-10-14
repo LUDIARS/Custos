@@ -25,6 +25,34 @@
 - LOG / TEST / SETTINGS は下からせり出すシート。開くのは 1 枚だけ。
 - Unity の Hierarchy / Console はスマホでは畳む (映像と操作を優先する)。
 
+### 1.3 スマホの操作メニュー
+
+スマホ表示では、ヘッダのステータス (IDLE / RUNNING など) を押すとフローティングの操作メニューが開く (`public/js/status-menu.js`)。
+
+- 中身: BOOT / Run / Test / Kill と、Unity の状態 (bridge・版・モード・シーン) と Play / Stop / Recompile / Refresh / Send to Session。
+  PC ではヘッダと VIEW にある同じ要素を、スマホ表示のときだけメニューへ移す (配線は 1 つ)。
+- 開始時と、ゲームが動いていない間は開いた状態にする。ゲームが動き出したら閉じる。「動いている」は、Unity ブリッジの app では
+  Play 中、それ以外は run が running。動いている間に開け閉めしたのは、次に状態が変わるまでそのまま。
+
+### 1.4 パッドの定義 (input.pad)
+
+apps.json の `input.pad` に、ゲームが使う操作部品だけを書く。書いた部品だけを並べ、空き枠は出さない。
+`pad` が無い app は、従来どおり `input.buttons` から位置を推測して同じ形にする (`padDefinition`、`public/js/virtual-pad-logic.js`)。
+
+```json
+"pad": {
+  "leftStick":  { "up": "W", "down": "S", "left": "A", "right": "D", "press": "LShift" },
+  "rightStick": { "up": "I", "down": "K", "left": "J", "right": "L", "press": "Tab" },
+  "dpad":       { "up": "Up", "down": "Down", "left": "Left", "right": "Right" },
+  "face":       { "a": "Space", "b": "Escape", "x": "Z", "y": "X" },
+  "shoulders":  { "lb": "Q", "rb": "E", "lt": "1", "rt": "3" },
+  "menu":       [{ "label": "Pause", "key": "P" }, { "label": "📷", "action": "screenshot" }]
+}
+```
+
+- 並び: 上段 LT・LB / menu / RB・RT、中段 左スティック (無ければ十字キー) / ABXY、下段 十字キー / 右スティック。
+- スティックは傾きを 8 方向に分けて方向キーの押下 / 解放にする。300ms 以内のダブルタップで `press` (L3 / R3) をタップで送る。
+
 ## 2. VIEW
 
 ### 2.1 Unity Editor を選んだとき
