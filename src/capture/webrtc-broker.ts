@@ -34,7 +34,7 @@ interface SessionDiag {
     firstRtpAtMs?:   number;
     pcStates:        string[];
     iceStates:       string[];
-    ffmpegStderr:    string[];
+    ffmpegStderr:    readonly string[];
     answerSdpLines:  number;
 }
 const DIAG_HISTORY_MAX = 10;

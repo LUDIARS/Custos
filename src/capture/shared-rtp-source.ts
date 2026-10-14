@@ -97,9 +97,12 @@ export class SharedRtpSourcePool {
         );
     }
 
-    /** 診断用: 映像源の ffmpeg stderr の直近行。 */
-    stderrTail(appId: string): string[] {
-        return this.sources.get(appId)?.stderrTail.slice() ?? [];
+    /**
+     * 診断用: 映像源の ffmpeg stderr の直近行。映像源が持つ配列そのものを返す (後から出た行も
+     * 見えるように)。呼び出し側は書き換えない。
+     */
+    stderrTail(appId: string): readonly string[] {
+        return this.sources.get(appId)?.stderrTail ?? [];
     }
 
     subscriberCount(appId: string): number {
@@ -150,13 +153,19 @@ export class SharedRtpSourcePool {
         });
 
         const opts = { rtpPort: source.rtpPort };
+        // spawn の成否は起動直後に非同期で決まる。先に待ち受けてから起動する。
+        const spawned = waitForSpawn(source.pipeline);
         if (app.inAppBridge) {
             const meta = await source.pipeline.startBridgeStream(app.inAppBridge, opts);
+            await spawned;
             log.info({ appId: app.id, meta, rtpPort: source.rtpPort }, "video source opened (bridge-stream)");
         } else {
             source.pipeline.start(app, opts);
+            await spawned;
             log.info({ appId: app.id, rtpPort: source.rtpPort }, "video source opened (desktop capture)");
         }
+        // 起動後に落ちた (spawn 後の error) ときも、映像の来ない session を残さない。
+        source.pipeline.on("error", () => this.teardown(source, true));
     }
 
     private teardown(source: Source, notify: boolean): void {
@@ -170,6 +179,19 @@ export class SharedRtpSourcePool {
         log.info({ appId: source.appId, subscribers: sinks.length }, "video source closed");
         if (notify) for (const sink of sinks) sink.onEnd();
     }
+}
+
+/**
+ * ffmpeg が起動できたかを待つ。起動できなければ (未インストール・CUSTOS_FFMPEG の誤り)、
+ * 映像が永遠に来ない session を作らず、接続要求をその理由で失敗させる。
+ */
+function waitForSpawn(pipeline: VideoPipeline): Promise<void> {
+    return new Promise((resolve, reject) => {
+        pipeline.on("spawn", () => resolve());
+        pipeline.on("error", (err: Error) => reject(new Error(
+            `ffmpeg を起動できません (${err.message})。ffmpeg を PATH に入れるか CUSTOS_FFMPEG で実行ファイルを指定してください`,
+        )));
+    });
 }
 
 function bindLoopback(udp: DgramSocket): Promise<number> {

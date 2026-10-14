@@ -137,6 +137,15 @@ describe("buildBridgeStreamFfmpegArgs", () => {
         expect(args).toContain("pipe:0");
     });
 
+    test("crops odd frame sizes to even before encoding (yuv420p needs even dimensions)", () => {
+        // Game View はウインドウ次第で 603x319 のような奇数になる。偶数にしないとエンコーダが開けない。
+        const args = buildBridgeStreamFfmpegArgs({ ...baseMeta, width: 603, height: 319 }, "x264", 4_000_000, 5004, "127.0.0.1", 96);
+        const vf = args.indexOf("-vf");
+        expect(vf).toBeGreaterThan(args.indexOf("pipe:0"));
+        expect(args[vf + 1]).toBe("crop=trunc(iw/2)*2:trunc(ih/2)*2");
+        expect(vf).toBeLessThan(args.indexOf("-c:v"));
+    });
+
     test("contains RTP output with correct port and pkt_size=1200", () => {
         const args = buildBridgeStreamFfmpegArgs(baseMeta, "x264", 4_000_000, 5004, "127.0.0.1", 96);
         expect(args).toContain("-f");

@@ -51,6 +51,12 @@ RTP datagram を購読中の全 WebRTC session に配る。
   (stop の後で ffmpeg が spawn されて取り残されるのを防ぐ)。
 - ffmpeg が終了したら全 session に通知して閉じる。クライアントは再接続で新しい映像源につながる。
 - ffmpeg は 1 秒 GOP なので、途中参加の session も 1 秒以内に keyframe を受け取れる。
+- ffmpeg を起動できない (未インストール・`CUSTOS_FFMPEG` の誤り) ときは、映像の来ない session を作らず、
+  `/rtc/offer` をその理由で失敗させる (起動の成否を spawn / error で待つ)。起動後に error を出したら全 session を閉じる。
+- ブリッジの映像 (Game View) は奇数サイズになりうる (例 603x319)。H.264 (yuv420p) は偶数しか受け付けないので、
+  エンコード前に `crop=trunc(iw/2)*2:trunc(ih/2)*2` で偶数に切り詰める。
+- Unity ブリッジの `/stream` は、最初のフレームを待つ間から「接続中」として数える (`FrameStreamer`)。Editor / Player の
+  フレーム取り込みは接続中のときだけ動くため、フレームが届いてから数えると最初のフレームが作られず必ず 503 になっていた。
 
 ## 4. 構成 (SRP)
 

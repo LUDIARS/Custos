@@ -14,10 +14,14 @@ class FakePipeline extends EventEmitter implements VideoPipeline {
     started = 0;
     stopped = 0;
     rtpPort = 0;
-    start(_app: AppConfig, opts: { rtpPort: number }): void { this.started++; this.rtpPort = opts.rtpPort; }
-    async startBridgeStream(_bridge: unknown, opts: { rtpPort: number }): Promise<unknown> {
+    start(_app: AppConfig, opts: { rtpPort: number }): void {
         this.started++;
         this.rtpPort = opts.rtpPort;
+        // 実 ffmpeg と同じく、起動の成否は非同期で知らせる。
+        setImmediate(() => this.emit("spawn"));
+    }
+    async startBridgeStream(_bridge: unknown, opts: { rtpPort: number }): Promise<unknown> {
+        this.start({} as AppConfig, opts);
         return {};
     }
     stop(): void { this.stopped++; }
@@ -149,6 +153,29 @@ describe("SharedRtpSourcePool", () => {
         });
         pools.push(pool);
         await expect(pool.acquire(captureApp(), "a", recordingSink())).rejects.toThrow("ffmpeg missing");
+        expect(pool.subscriberCount("demo")).toBe(0);
+    });
+
+    test("ffmpeg を起動できなければ acquire は理由付きで reject し、映像源は残らない", async () => {
+        const pool = new SharedRtpSourcePool({
+            createPipeline: () => {
+                const p = new FakePipeline();
+                p.start = () => { setImmediate(() => p.emit("error", new Error("spawn ffmpeg ENOENT"))); };
+                return p;
+            },
+        });
+        pools.push(pool);
+        await expect(pool.acquire(captureApp(), "a", recordingSink())).rejects.toThrow(/ffmpeg を起動できません.*ENOENT/);
+        expect(pool.subscriberCount("demo")).toBe(0);
+    });
+
+    test("起動後に ffmpeg が error を出したら購読者に onEnd を通知する", async () => {
+        const pipelines: FakePipeline[] = [];
+        const pool = newPool(pipelines);
+        const a = recordingSink();
+        await pool.acquire(captureApp(), "a", a);
+        pipelines[0]!.emit("error", new Error("broken pipe"));
+        expect(a.ended).toBe(1);
         expect(pool.subscriberCount("demo")).toBe(0);
     });
 

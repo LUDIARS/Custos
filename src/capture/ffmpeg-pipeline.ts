@@ -203,6 +203,9 @@ export function buildBridgeStreamFfmpegArgs(
         "-r",         String(meta.fps),
         "-i",         "pipe:0",
         "-an",
+        // H.264 (yuv420p) は縦横とも偶数でないとエンコーダが開けない。Game View の大きさは
+        // ウインドウ次第で奇数になる (例 603x319) ので、1px 切り詰めて偶数にする。
+        "-vf",        "crop=trunc(iw/2)*2:trunc(ih/2)*2",
         ...encA,
         "-payload_type", pt,
         "-f",     "rtp",
@@ -322,6 +325,9 @@ export class FfmpegPipeline extends EventEmitter {
             }
         });
 
+        // 起動できたことを映像源 (shared-rtp-source.ts) に知らせる。起動失敗 (ENOENT など) は
+        // "error" で来るので、どちらかを待てば ffmpeg が使えるかが分かる。
+        this.proc?.once("spawn", () => this.emit("spawn"));
         this.proc?.on("error", (err) => {
             log.warn({ err }, "ffmpeg spawn error");
             this.emit("error", err);

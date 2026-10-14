@@ -38,8 +38,9 @@ namespace Ludiars.Custos.Bridge
         private readonly object _frameLock = new object();
 
         // ── アクティブストリーム管理 ─────────────────────
-        private volatile bool _hasActiveStream;
-        private readonly object _streamLock = new object();
+        // 最初のフレームを待っている接続も数える (StartStream 参照)。複数の接続が互いの
+        // 終了で取り込みを止めないよう、bool ではなく接続数で持つ。
+        private int _activeStreams;
 
         // ── IFrameStreamer ───────────────────────────────
 
@@ -61,7 +62,7 @@ namespace Ludiars.Custos.Bridge
         // ── ストリーム有無クエリ ─────────────────────────
 
         /// <summary>アクティブなストリーム接続があるかどうか。</summary>
-        public bool HasActiveStream => _hasActiveStream;
+        public bool HasActiveStream => Volatile.Read(ref _activeStreams) > 0;
 
         // ── /stream ハンドラ ─────────────────────────────
 
@@ -70,6 +71,22 @@ namespace Ludiars.Custos.Bridge
         /// fps パラメータを受け取り、接続が切れるまでフレームを送り続ける。
         /// </summary>
         public void StartStream(HttpListenerContext ctx)
+        {
+            // 最初のフレームを待つ間から「接続中」にする。フレームの取り込みは接続中のときだけ
+            // 動く (CustosBridgeEditorBootstrap.OnEditorUpdate / CustosBridgeRuntime.Update) ので、
+            // フレームが届いてから数えると、最初のフレームが永遠に作られず必ず 503 になる。
+            Interlocked.Increment(ref _activeStreams);
+            try
+            {
+                ServeStream(ctx);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _activeStreams);
+            }
+        }
+
+        private void ServeStream(HttpListenerContext ctx)
         {
             var req = ctx.Request;
             var res = ctx.Response;
@@ -123,9 +140,6 @@ namespace Ludiars.Custos.Bridge
                 return;
             }
 
-            // ── アクティブフラグ ON ──
-            lock (_streamLock) { _hasActiveStream = true; }
-
             int intervalMs = Mathf.Max(1, 1000 / fps);
             var stream     = res.OutputStream;
             byte[] lastSent = null;
@@ -164,7 +178,6 @@ namespace Ludiars.Custos.Bridge
             }
             finally
             {
-                lock (_streamLock) { _hasActiveStream = false; }
                 Protocol.HttpJson.SafeClose(res);
                 Debug.Log("[CustosBridge] /stream stopped.");
             }
