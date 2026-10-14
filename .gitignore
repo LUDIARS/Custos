@@ -13,3 +13,9 @@ out/
 
 # 遠隔プレイの行動ログ (個人の操作記録。リポに入れない)
 logs/plays/
+
+# Unity が読み込み時に生成する .meta (パッケージを file: 参照したときに作られる)
+unity/**/*.meta
+
+# Anatomia が書き出す解析データ (spec/domains/ が正本)
+spec/data/
