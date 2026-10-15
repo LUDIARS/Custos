@@ -90,6 +90,12 @@ namespace Ludiars.Custos.Bridge
         /// </summary>
         public IBridgeRouteHandler Routes { get; set; }
 
+        /// <summary>
+        /// H.264 配信 (/stream?codec=h264、/stream/keyframe、/stream/bitrate)。未設定なら codec=h264 は 415。
+        /// <see cref="Start"/> 前に設定する。
+        /// </summary>
+        public H264Streamer H264Stream { get; set; }
+
         public void Start()
         {
             if (_isRunning) return;
@@ -202,6 +208,14 @@ namespace Ludiars.Custos.Bridge
                 case "/stream":
                     if (req.HttpMethod != "GET") { HttpJson.WriteJson(res, 405, "{\"error\":\"GET only\"}"); return; }
                     HandleStream(ctx);
+                    break;
+                case "/stream/keyframe":
+                    if (req.HttpMethod != "POST") { HttpJson.WriteJson(res, 405, "{\"error\":\"POST only\"}"); return; }
+                    HandleStreamKeyframe(res);
+                    break;
+                case "/stream/bitrate":
+                    if (req.HttpMethod != "POST") { HttpJson.WriteJson(res, 405, "{\"error\":\"POST only\"}"); return; }
+                    HandleStreamBitrate(req, res);
                     break;
                 case "/editor/publish-capture":
                     if (req.HttpMethod != "POST") { HttpJson.WriteJson(res, 405, "{\"error\":\"POST only\"}"); return; }
@@ -409,12 +423,57 @@ namespace Ludiars.Custos.Bridge
 
         private void HandleStream(HttpListenerContext ctx)
         {
+            // codec=h264: ネイティブのエンコーダで H.264 を送る。使えなければ 415 を返し、
+            // Custos は従来の BGRA (+ ffmpeg) に切り替える。
+            if (string.Equals(ctx.Request.QueryString["codec"], "h264", StringComparison.OrdinalIgnoreCase))
+            {
+                var h264 = H264Stream;
+                if (h264 == null || !h264.IsAvailable)
+                {
+                    string reason = h264 == null ? "h264 stream not configured" : h264.UnavailableReason;
+                    HttpJson.WriteJson(ctx.Response, 415, $"{{\"error\":\"h264 unavailable: {HttpJson.Escape(reason)}\"}}");
+                    return;
+                }
+                StartStreamThread(() => h264.StartStream(ctx));
+                return;
+            }
+            StartStreamThread(() => _streamer.StartStream(ctx));
+        }
+
+        private void HandleStreamKeyframe(HttpListenerResponse res)
+        {
+            if (H264Stream == null) { HttpJson.WriteJson(res, 404, "{\"error\":\"h264 stream not configured\"}"); return; }
+            H264Stream.RequestKeyFrame();
+            HttpJson.WriteJson(res, 200, "{\"ok\":true}");
+        }
+
+        private void HandleStreamBitrate(HttpListenerRequest req, HttpListenerResponse res)
+        {
+            if (H264Stream == null) { HttpJson.WriteJson(res, 404, "{\"error\":\"h264 stream not configured\"}"); return; }
+            BitratePayload payload;
+            try
+            {
+                using var reader = new StreamReader(req.InputStream, req.ContentEncoding ?? Encoding.UTF8);
+                payload = JsonUtility.FromJson<BitratePayload>(reader.ReadToEnd());
+            }
+            catch { HttpJson.WriteJson(res, 400, "{\"error\":\"bad json\"}"); return; }
+            if (payload == null || payload.bps < 100_000 || payload.bps > 50_000_000)
+            {
+                HttpJson.WriteJson(res, 400, "{\"error\":\"bps must be 100000-50000000\"}");
+                return;
+            }
+            H264Stream.SetBitrate(payload.bps);
+            HttpJson.WriteJson(res, 200, "{\"ok\":true}");
+        }
+
+        private static void StartStreamThread(Action serve)
+        {
             // FrameStreamer は接続が続く間ずっとブロックして配信する。accept loop は 1 本なので、
             // ここで直接呼ぶと配信中は Play / Stop / status / key / pointer が全て詰まる
             // (Custos は VIEW を開いている間 /stream に常時つなぐ)。専用スレッドで配信する。
             var thread = new Thread(() =>
             {
-                try { _streamer.StartStream(ctx); }
+                try { serve(); }
                 catch (Exception e) { Debug.LogWarning($"[CustosBridge] /stream failed: {e.Message}"); }
             })
             {

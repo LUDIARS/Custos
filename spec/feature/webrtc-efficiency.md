@@ -1,7 +1,8 @@
 # WebRTC 転送効率の最適化 (設計案)
 
 - 作成日: 2026-10-15 (neco 指示「今すぐじゃなくて良いんだけど、WebRTC の転送効率が悪いので最適化案を設計する」)
-- 状態: **設計案**。実装は人間の開始指示を受けてから。段 0 (計測) を最初に入れ、数字を見て段 1 以降の採否を決める。
+- 状態: **§7 の方式 (Unity 側でハードウェア H.264) で実装済み** (2026-10-15)。§1〜§6 は検討の経緯。
+  ffmpeg の経路は、デスクトップキャプチャと H.264 を出せないブリッジのために残す。
 - 関連: [floating-ui-and-shared-video.md](floating-ui-and-shared-video.md) §3 (映像源の共有)、[unity-bridge.md](unity-bridge.md) §2 (フレーム取得)
 
 ## 0. 今の経路
@@ -139,3 +140,76 @@ ffmpeg CLI の制約 (実行中にビットレートを変えられない、外�
 ### 6.4 エンコーダへの差分ヒント — **今は採らない**
 
 - 変わった領域をエンコーダに伝える (ROI / 強調マップ) と、その領域に多くビットを回せる。NVENC は対応するが ffmpeg CLI からはフレームごとに渡せない。段 4 (プロセス内エンコーダ) を入れる場合に一緒に検討する。
+
+## 7. 採用した方式: Unity 側でハードウェア H.264 (2026-10-15 neco 指示「エンコードだけ Unity」「同じやつ自作して」)
+
+「ffmpeg は要るのか、フレームバッファ直転送の方が良いのでは」に対する結論。生のフレームはネットワークに載らない
+(1280x720 BGRA 30fps で約 880 Mbps) のでエンコードは必須。無駄は ffmpeg の手前 (GPU→CPU 読み戻し・生 BGRA の HTTP 転送・
+CPU の色変換・ffmpeg プロセス) にあったので、エンコードを Unity の中 (GPU のそば) に移した。
+`com.unity.webrtc` は非推奨 (deprecated、Unity 6000.4 で動かない報告) なので使わず、必要な部分 (ハードウェア H.264) を自作した。
+
+### 7.1 経路
+
+```
+Unity: ScreenCapture → RenderTexture (画面の大きさ)
+  └─ compute shader (Resources/CustosRgbToNv12): 配信解像度へ拡大縮小 + BT.601 NV12 (Nv12Converter.cs)
+       └─ AsyncGPUReadback (NV12 = 1.5 B/px、BGRA の 6 割減)
+            └─ H264StreamEncoder.cs (作業スレッド) → custos_h264.dll (native/custos-h264、Media Foundation の
+               ハードウェア H.264 MFT。NVIDIA / AMD / Intel、無ければソフトウェア)
+                 └─ GET /stream?codec=h264 (H264Streamer.cs): [u32 長さ][i64 時刻µs][u8 フラグ] + Annex-B
+Custos: bridge-h264-stream.ts → bridge-h264-frames.ts (切り分け) → h264-rtp-packetizer.ts (RFC 6184、FU-A)
+  └─ UDP → SharedRtpSourcePool (今までどおり app ごとに 1 本、全員に配る) → werift → ブラウザ
+```
+
+- ffmpeg は使わない。ブリッジが `codec=h264` を出せなければ (415: DLL が無い・エンコーダが作れない・古いブリッジ)、
+  `VideoPipelineSelector` が従来の生 BGRA + ffmpeg に切り替える (`inAppBridge.video.codec: "auto"`)。
+- グラフィックス API に依存しない (D3D11 / D3D12 / Vulkan で同じ経路)。GPU のテクスチャをエンコーダへ直接渡す
+  (読み戻しも無くす) のは次の段 (D3D12 と D3D11 の共有が要る。ICE は Windows で D3D12 が先頭)。
+
+### 7.2 エンコーダ (native/custos-h264)
+
+- C API (`include/custos_h264.h`): create / encode / pop / set_bitrate / request_keyframe / destroy。
+- 低遅延 (`CODECAPI_AVLowLatencyMode`)・CBR・B フレーム無し・baseline (codec 契約 `profile-level-id=42e01f`) ・
+  GOP 10 秒。IDR は最初と要求時だけ (`CODECAPI_AVEncVideoForceKeyFrame`)。ビットレートは実行中に変える
+  (`CODECAPI_AVEncCommonMeanBitRate`)。キーフレームには SPS/PPS を必ず付ける (途中から受けたブラウザが復号できる)。
+- ハードウェア MFT は非同期 (イベント駆動)。入力はプラグインが持つ D3D11 デバイス (エンコーダと同じアダプタ) の
+  NV12 テクスチャ (4 枚を巡回)。取り出しが追いつかず出力を捨てたら次を IDR にする。
+- ビルド: `native/custos-h264/build.cmd` (Visual Studio 2022 Build Tools)。DLL は静的 CRT で
+  `unity/com.ludiars.custos-bridge/Runtime/Plugins/x86_64/custos_h264.dll` に置く。
+- 試験: `build/Release/custos_h264_test.exe` (合成フレーム 90 枚。最初が SPS/PPS/IDR のキーフレーム、要求時だけ
+  キーフレーム、ビットレート変更が通る)。2026-10-15 に RTX 2070 (NVIDIA H.264 Encoder MFT) で PASS。
+
+### 7.3 帯域とキーフレーム (段 1・段 2 の代わり)
+
+- ブラウザの REMB (werift の `sender.receiverEstimatedMaxBitrate`) を 1 秒ごとに読み、見ている全員の最小値を
+  `minBitrate`〜`maxBitrate` に収めてブリッジへ `POST /stream/bitrate` (下げはすぐ、上げは 4 秒続いてから、15% 未満は変えない。
+  `video-feedback-policy.ts`)。
+- ブラウザの PLI と途中参加で `POST /stream/keyframe` (500ms に 1 回まで)。GOP が長いので、途中参加は必ず要求する。
+- 画面が変わらない間はエンコードしない (`StaticFrameGate`、最低 1 秒に 1 枚)。§6.1 の採用分。
+
+### 7.4 解像度 (§5 の採用分)
+
+- 配信解像度は `inAppBridge.video.width/height` (既定 1280x720) の枠に縦横比を保って収め、16 の倍数にそろえる
+  (`StreamResolution`)。Game View の窓が小さくても拡大するので、窓の大きさで解像度が変わらない。
+- 描画解像度そのものを固定する案 A (Game View のサイズ変更) は入れていない (Editor 内部 API への依存を避けた)。
+
+### 7.5 設定 (apps.json `inAppBridge.video`)
+
+| 項目 | 既定 | 意味 |
+|---|---|---|
+| `codec` | `auto` | `auto` = H.264 を試し、だめなら BGRA + ffmpeg。`h264` = H.264 だけ。`rawvideo` = 従来どおり |
+| `width` / `height` | 1280 / 720 | 配信解像度の上限の枠 |
+| `bitrate` | 3,000,000 | 開始のビットレート |
+| `minBitrate` / `maxBitrate` | 300,000 / 6,000,000 | 帯域推定で動かす範囲 |
+
+### 7.6 計測 (段 0 の採用分)
+
+- ブラウザの `getStats()` を 2 秒ごとに読み、VIEW の状態表示に `video: live · 2.1 Mbps · 30fps · loss 0.2% · rtt 45ms · 1280x672`
+  を出す (`public/js/rtc-stats-logic.js`)。サーバー側にログは残さない。
+
+### 7.7 未確認・次の段
+
+- Unity での実動作 (Editor の Play 中の配信、D3D12 での compute shader と readback、色と上下の向き) は未確認。
+  Unity の EditMode テスト (`StreamResolutionTests` / `StaticFrameGateTests`) はコンパイルまで確認済みで未実行。
+- Edit モード中の配信は今までどおり未対応 (Play 中だけ)。
+- 次の段: GPU テクスチャを直接エンコーダへ (読み戻し無し)、品質の段 (simulcast 的に 2 本)、描画解像度の固定 (案 A)。

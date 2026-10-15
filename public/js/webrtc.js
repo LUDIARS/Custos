@@ -73,6 +73,17 @@ export async function connectWebRTC({ appId, videoEl, apiFetch, onLog, onState, 
 
 const sessions = new Map();
 
+/** 受信統計 (RTCStatsReport)。セッションが無ければ null。 */
+export async function getWebRTCStats(sessionId) {
+    const s = sessions.get(sessionId);
+    if (!s) return null;
+    try {
+        return await s.pc.getStats();
+    } catch {
+        return null;
+    }
+}
+
 export async function closeWebRTC({ apiFetch, sessionId }) {
     const s = sessions.get(sessionId);
     if (s) {

@@ -38,6 +38,24 @@ namespace Ludiars.Custos.Bridge.Capture
     {
         /// <summary>最新 BGRA フレームを更新する (main thread から呼ぶ)。</summary>
         void UpdateFrame(byte[] bgraData, int width, int height);
+
+        /// <summary>BGRA の /stream に接続中か (接続が無ければ BGRA の読み戻しを省く)。</summary>
+        bool HasActiveStream { get; }
+    }
+
+    /// <summary>
+    /// H.264 配信 (/stream?codec=h264) の受け口。接続中だけ、プロバイダが画面を NV12 にして渡す。
+    /// </summary>
+    public interface IH264FrameTarget
+    {
+        bool HasActiveStream { get; }
+        bool IsAvailable { get; }
+
+        /// <summary>画面の大きさから、配信する大きさ (16 の倍数) を決める。</summary>
+        void GetTargetSize(int screenWidth, int screenHeight, out int width, out int height);
+
+        /// <summary>NV12 (Y 面 + UV 面、詰めて並べる) を 1 枚渡す。main thread から呼ぶ。</summary>
+        void SubmitNv12(byte[] nv12, int width, int height);
     }
 }
 

@@ -47,6 +47,8 @@ interface SessionDiag {
 const DIAG_HISTORY_MAX = 10;
 /** ICE が disconnected のまま戻らなければ session を閉じるまでの猶予。 */
 const ICE_DISCONNECT_GRACE_MS = 10_000;
+/** ブラウザの帯域推定 (REMB) を読む間隔。 */
+const ESTIMATE_POLL_MS = 1_000;
 const diagHistory: SessionDiag[] = [];
 
 export function getRtcDiagnostics(): SessionDiag[] {
@@ -64,8 +66,18 @@ interface RTCRtpCodecParametersLike {
     }): unknown;
 }
 
+/** werift の RTCRtpSender のうち、ブラウザからのフィードバックに使う部分。 */
+interface SenderLike {
+    receiverEstimatedMaxBitrate?: bigint;
+    onPictureLossIndication?: { subscribe: (cb: () => void) => unknown };
+}
+
+interface TransceiverLike {
+    sender?: SenderLike;
+}
+
 interface PCLike {
-    addTransceiver:       (trackOrKind: unknown, options?: { direction?: string }) => unknown;
+    addTransceiver:       (trackOrKind: unknown, options?: { direction?: string }) => TransceiverLike | unknown;
     createAnswer:         () => Promise<{ sdp: string; type: string }>;
     setLocalDescription:  (desc: { sdp: string; type: string }) => Promise<void>;
     setRemoteDescription: (desc: { sdp: string; type: string }) => Promise<void>;
@@ -114,6 +126,8 @@ interface CaptureSession {
     pc:          PCLike;
     createdAt:   number;
     diag:        SessionDiag;
+    /** フィードバックの購読を止める。 */
+    stopFeedback: () => void;
 }
 
 export interface BrokerEvents {
@@ -195,7 +209,7 @@ export class WebRTCBroker extends EventEmitter {
 
         // codec を track にも紐付けると writeRtp が payloadType=96 に rewrite する。
         const track = new w.MediaStreamTrack({ kind: "video", codec: h264 });
-        pc.addTransceiver(track, { direction: "sendonly" });
+        const videoTransceiver = pc.addTransceiver(track, { direction: "sendonly" }) as TransceiverLike | undefined;
         const audioTrack = opus ? new w.MediaStreamTrack({ kind: "audio", codec: opus }) : null;
         if (audioTrack) pc.addTransceiver(audioTrack, { direction: "sendonly" });
 
@@ -321,8 +335,9 @@ export class WebRTCBroker extends EventEmitter {
         log.info({ sessionId, appId: app.id, subscribers: this.sources.subscriberCount(app.id), audio: Boolean(audioSources) && !diag.audioError },
                  "capture session opened");
 
+        const stopFeedback = this.watchFeedback(app.id, sessionId, videoTransceiver?.sender);
         const session: CaptureSession = {
-            id: sessionId, appId: app.id, pc, createdAt: Date.now(), diag,
+            id: sessionId, appId: app.id, pc, createdAt: Date.now(), diag, stopFeedback,
         };
         this.sessions.set(sessionId, session);
 
@@ -353,6 +368,7 @@ export class WebRTCBroker extends EventEmitter {
         if (!s) return false;
         // 先に map から外す。pc.close() が connectionstatechange 経由で再入しても二重に閉じない。
         this.sessions.delete(sessionId);
+        s.stopFeedback();
         this.sources.release(s.appId, sessionId);
         this.audioSources?.release(s.appId, sessionId);
         try { s.pc.close(); } catch { /* 既に閉じていることがある。後始末なので best-effort */ }
@@ -366,6 +382,30 @@ export class WebRTCBroker extends EventEmitter {
             iceStates:    s.diag.iceStates,
         }, "capture session closed");
         return true;
+    }
+
+    /**
+     * ブラウザからの PLI (キーフレームが欲しい) と帯域推定 (REMB) を映像源へ渡す。
+     * 映像源が H.264 のブリッジならキーフレーム要求とビットレート変更になる (ffmpeg の映像源では何もしない)。
+     */
+    private watchFeedback(appId: string, sessionId: string, sender: SenderLike | undefined): () => void {
+        if (!sender) return () => { /* sender が取れない werift の版: フィードバック無しで流す */ };
+        let active = true;
+        sender.onPictureLossIndication?.subscribe(() => {
+            if (active) this.sources.feedback(appId, sessionId, { kind: "pli" });
+        });
+        let lastEstimate = 0n;
+        const timer = setInterval(() => {
+            const estimate = sender.receiverEstimatedMaxBitrate ?? 0n;
+            if (estimate <= 0n || estimate === lastEstimate) return;
+            lastEstimate = estimate;
+            this.sources.feedback(appId, sessionId, { kind: "estimate", bps: Number(estimate) });
+        }, ESTIMATE_POLL_MS);
+        timer.unref?.();
+        return () => {
+            active = false;
+            clearInterval(timer);
+        };
     }
 
     closeAllForApp(appId: string): void {

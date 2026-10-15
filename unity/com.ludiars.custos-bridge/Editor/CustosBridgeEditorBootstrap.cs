@@ -25,6 +25,8 @@ namespace Ludiars.Custos.Bridge.Editor
         private static BridgeServer  _server;
         private static FrameStreamer _streamer;
         private static GameObject    _hostGo;
+        private static VideoEncoding.H264StreamEncoder _h264Encoder;
+        private static H264Streamer  _h264;
 
         // ── 静的コンストラクタ ────────────────────────────
 
@@ -102,7 +104,8 @@ namespace Ludiars.Custos.Bridge.Editor
                 "Custos Bridge Status",
                 $"Running: {running}\n" +
                 $"Editor toggle: {IsEditorToggleOn()}\n" +
-                $"Stream active: {(_streamer?.HasActiveStream ?? false)}",
+                $"Stream active: {(_streamer?.HasActiveStream ?? false)}\n" +
+                $"H.264: {(_h264 == null ? "-" : _h264.IsAvailable ? _h264Encoder.EncoderName : _h264.UnavailableReason)} (streaming: {_h264?.HasActiveStream ?? false})",
                 "OK");
         }
 
@@ -160,6 +163,11 @@ namespace Ludiars.Custos.Bridge.Editor
             _server.OnPointer = (x, y, button, phase) => pointerInjector.InjectPointer(x, y, button, phase);
 #endif
             _server.Routes = new Control.EditorControlRoutes();
+            // H.264 配信 (/stream?codec=h264)。ネイティブのエンコーダが使えなければ従来の BGRA だけ。
+            _h264Encoder = new VideoEncoding.H264StreamEncoder();
+            _h264 = new H264Streamer(_h264Encoder);
+            runtimeProvider.SetH264Target(_h264);
+            _server.H264Stream = _h264;
             _server.Start();
 
             // quitting で injector も片付ける
@@ -183,6 +191,9 @@ namespace Ludiars.Custos.Bridge.Editor
                 _hostGo = null;
             }
             _streamer = null;
+            _h264Encoder?.Dispose();
+            _h264Encoder = null;
+            _h264 = null;
             CustosCapturePublisher.Reset();
         }
 
@@ -194,10 +205,10 @@ namespace Ludiars.Custos.Bridge.Editor
 
             // ストリーム接続中はフレームキャプチャをリクエスト
             // (EditorApplication.update は ~100Hz 程度で呼ばれる)
-            if (_streamer != null && _streamer.HasActiveStream && _hostGo != null)
+            if (_streamer != null && _hostGo != null)
             {
                 var provider = _hostGo.GetComponent<RuntimeCameraViewProvider>();
-                if (provider != null && Application.isPlaying)
+                if (provider != null && provider.HasActiveStream && Application.isPlaying)
                 {
                     provider.RequestStreamPump();
                     provider.PumpStream(_streamer);

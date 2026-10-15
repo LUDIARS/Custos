@@ -15,6 +15,16 @@ port 既定: **17778** (loopback only)
 | GET | `/stream?fps=<F>` | 連続 raw BGRA8 フレームストリーム (詳細後述) |
 | POST | `/pointer` | `{"x":0..1,"y":0..1,"button":0\|1\|2,"phase":"down"\|"up"\|"move"}` — 仮想 Mouse へ注入 (左上原点の正規化座標) |
 | GET | `/state` | `{"isPlaying":bool,"state":<object\|null>}` — ゲームが登録した状態 (行動ログ用) |
+| GET | `/stream?codec=h264&fps=&width=&height=&bitrate=` | ブリッジ内のハードウェア H.264 (長さ付きフレーム、使えなければ 415) |
+| POST | `/stream/keyframe` | 次のフレームを IDR に |
+| POST | `/stream/bitrate` | `{"bps":<int>}` — H.264 のビットレートを変える |
+
+### H.264 配信とネイティブプラグイン
+
+`/stream?codec=h264` は `Runtime/Plugins/x86_64/custos_h264.dll` (Windows、Media Foundation のハードウェア
+H.264) を使う。DLL はリポの `native/custos-h264/build.cmd` で作る (Visual Studio 2022 Build Tools)。DLL が無い・
+エンコーダが作れない環境では 415 を返し、Custos は従来の BGRA (`/stream`) + ffmpeg に戻す。
+設計は Custos の `spec/feature/webrtc-efficiency.md` §7。
 
 ### Editor 専用エンドポイント (`/editor/*`)
 

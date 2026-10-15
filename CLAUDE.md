@@ -59,10 +59,12 @@ HTTP ブリッジ** に向ける。プロトコルは ergo_custos と Unity ブ�
 - 設定の正規化: `inAppBridge {kind: "ergo"|"unity", host, port, fps}`。旧
   `ergoCustos {host,port}` は `kind:"ergo"` に正規化 (後方互換、`apps-config.ts`)。
   既定 port は ergo=5198 / unity=17778。
-- WebRTC 動画源の分岐 (`webrtc-broker.ts`): `inAppBridge` があれば
-  `FfmpegPipeline.startBridgeStream()` がブリッジの `/stream` に HTTP 接続し、
-  raw BGRA を `ffmpeg -f rawvideo … -i pipe:0 → -f rtp` に流す
-  (`src/capture/bridge-stream.ts`)。無ければ従来の gdigrab/x11grab。
+- WebRTC 動画源の分岐 (`video-pipeline-selector.ts`): Unity ブリッジはまず
+  `/stream?codec=h264` (ブリッジ内のハードウェア H.264、`native/custos-h264`) を使い、Custos が RTP に分ける
+  (ffmpeg 不要、`h264-bridge-pipeline.ts`)。出せなければ (415) `FfmpegPipeline.startBridgeStream()` が
+  `/stream` の raw BGRA を `ffmpeg -f rawvideo … -i pipe:0 → -f rtp` に流す (`src/capture/bridge-stream.ts`)。
+  ergo も BGRA + ffmpeg。capture のみの app は従来の gdigrab/x11grab。設計は `spec/feature/webrtc-efficiency.md` §7。
+  ネイティブ DLL を変えたら `native/custos-h264/build.cmd` で作り直し、`custos_h264_test.exe` を通す。
 - Unity ブリッジ本体は `unity/com.ludiars.custos-bridge` (UPM パッケージ、C#)。
   HID usage コードは `ergo-custos-client.ts` の `KEY_TABLE` /
   `Runtime/Input/HidKeyMap.cs` / ergo `types.h` の 3 点を同期させる。

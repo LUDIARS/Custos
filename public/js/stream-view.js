@@ -7,10 +7,13 @@
  * - 📷 は今の画面の PNG を 1 枚保存する (映像はそのまま)
  */
 
-import { connectWebRTC, closeWebRTC } from "/js/webrtc.js";
+import { connectWebRTC, closeWebRTC, getWebRTCStats } from "/js/webrtc.js";
+import { formatVideoStats, pickVideoStats, summarizeVideoStats } from "/js/rtc-stats-logic.js";
 
 const RETRY_BASE_MS = 2_000;
 const RETRY_MAX_MS = 30_000;
+/** 受信統計 (実効 kbps / fps / 損失 / RTT) を状態表示に出す間隔。 */
+const STATS_INTERVAL_MS = 2_000;
 
 export function createStreamView({ elements, apiFetch, log }) {
     const { video, image, placeholder, placeholderTitle, placeholderHint, status, audioToggle } = elements;
@@ -21,6 +24,8 @@ export function createStreamView({ elements, apiFetch, log }) {
     let retryTimer = null;
     let retryDelay = RETRY_BASE_MS;
     let live = false;
+    let statsTimer = null;
+    let lastStats = null;
 
     // 映像のフレームが描ける状態になったら表示に切り替える。playing は端末によって出ないこと
     // があるので、最初のフレームの大きさが分かった時点 (loadeddata / resize) でも切り替える。
@@ -90,6 +95,7 @@ export function createStreamView({ elements, apiFetch, log }) {
         if (state === "connected") {
             retryDelay = RETRY_BASE_MS;
             setStatus("live", "video: live");
+            startStats();
             return;
         }
         if (state === "failed" || state === "disconnected" || state === "closed") {
@@ -117,7 +123,27 @@ export function createStreamView({ elements, apiFetch, log }) {
         retryTimer = null;
     }
 
+    /** 接続中は受信統計を取り、状態表示に `video: live · 2.1 Mbps · 30fps · ...` と出す。 */
+    function startStats() {
+        stopStats();
+        statsTimer = window.setInterval(async () => {
+            if (!sessionId) return;
+            const report = await getWebRTCStats(sessionId);
+            const cur = report ? pickVideoStats(report) : null;
+            const text = formatVideoStats(summarizeVideoStats(lastStats, cur));
+            lastStats = cur;
+            if (text && status.dataset.state === "live") status.textContent = `video: live · ${text}`;
+        }, STATS_INTERVAL_MS);
+    }
+
+    function stopStats() {
+        if (statsTimer !== null) window.clearInterval(statsTimer);
+        statsTimer = null;
+        lastStats = null;
+    }
+
     function dropSession() {
+        stopStats();
         live = false;
         video.classList.remove("active");
         if (sessionId) {

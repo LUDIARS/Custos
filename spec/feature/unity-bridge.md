@@ -31,6 +31,18 @@ Custos 本体 (TS) は一切変更せずに Unity アプリ/Editor を遠隔操�
 `src/input/forwarder.ts` (キー転送) と `src/capture/screenshot-stream.ts` (PNG ポーリング) /
 `src/routes/rtc-routes.ts` (RTC ソース) が既存コードのまま Unity bridge を使う。
 
+### 0.0 追加 endpoint: H.264 配信 (2026-10-15)
+
+互換 protocol は変えず、次を足した (詳細は [webrtc-efficiency.md](webrtc-efficiency.md) §7)。
+
+| endpoint | 内容 |
+|---|---|
+| `GET /stream?codec=h264&fps=&width=&height=&bitrate=` | ブリッジ内のハードウェア H.264。本体は `[u32 BE 長さ][i64 BE 時刻µs][u8 フラグ(bit0=キー)]` + Annex-B の繰り返し、長さ 0 は 1 秒ごとの keepalive。ヘッダ `X-Frame-Codec: h264`。出せなければ 415 |
+| `POST /stream/keyframe` | 次のフレームを IDR に |
+| `POST /stream/bitrate` `{ "bps": N }` | ビットレートを変える (100k〜50M) |
+
+`codec` を付けない `GET /stream` は今までどおり生 BGRA。
+
 ### 0.1 既存プロトタイプ (prior art / 置き換え対象)
 
 `GameUnity/Assets/Scripts/Editor/Musa/UnityErgoCustosBridge.cs` (port 8687、`[InitializeOnLoad]`、

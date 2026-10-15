@@ -13,7 +13,10 @@ import dgram, { type Socket as DgramSocket } from "node:dgram";
 import type { EventEmitter } from "node:events";
 import { childLogger } from "../shared/logger.js";
 import type { AppConfig } from "../config/apps-config.js";
-import { FfmpegPipeline, type FfmpegStartOptions } from "./ffmpeg-pipeline.js";
+import type { FfmpegStartOptions } from "./ffmpeg-pipeline.js";
+import type { VideoFeedbackTarget } from "./h264-bridge-pipeline.js";
+import { VideoPipelineSelector } from "./video-pipeline-selector.js";
+import { VideoFeedbackPolicy } from "./video-feedback-policy.js";
 
 const log = childLogger("rtp-source");
 
@@ -51,12 +54,15 @@ export interface SharedRtpSourceDeps<P extends RtpPipeline> {
     kind?:          string;
 }
 
-/** 映像源のプール。既定は FfmpegPipeline (bridge-stream かデスクトップキャプチャ)。 */
+/**
+ * 映像源のプール。既定は VideoPipelineSelector: Unity ブリッジで H.264 が使えればそれ (ffmpeg 不要)、
+ * 使えなければ生 BGRA + ffmpeg、デスクトップキャプチャは ffmpeg。
+ */
 export function createVideoSourcePool(
     deps: Partial<SharedRtpSourceDeps<VideoPipeline>> = {},
 ): SharedRtpSourcePool<VideoPipeline> {
     return new SharedRtpSourcePool<VideoPipeline>({
-        createPipeline: deps.createPipeline ?? (() => new FfmpegPipeline()),
+        createPipeline: deps.createPipeline ?? (() => new VideoPipelineSelector()),
         launch:         deps.launch ?? launchVideo,
         kind:           "video",
         ...(deps.createSocket ? { createSocket: deps.createSocket } : {}),
@@ -75,8 +81,20 @@ async function launchVideo(app: AppConfig, pipeline: VideoPipeline, opts: { rtpP
     }
 }
 
+/** ブラウザからの映像フィードバック (webrtc-broker が sender の RTCP から作る)。 */
+export type VideoFeedback =
+    | { kind: "pli" }
+    | { kind: "estimate"; bps: number };
+
+function isFeedbackTarget(p: unknown): p is VideoFeedbackTarget {
+    const t = p as Partial<VideoFeedbackTarget> | null;
+    return typeof t?.requestKeyFrame === "function" && typeof t.setBitrate === "function";
+}
+
 interface Source<P extends RtpPipeline> {
     appId:      string;
+    /** 帯域推定とキーフレーム要求のまとめ役 (inAppBridge.video がある app だけ)。 */
+    policy:     VideoFeedbackPolicy | null;
     udp:        DgramSocket;
     pipeline:   P;
     rtpPort:    number;
@@ -121,14 +139,35 @@ export class SharedRtpSourcePool<P extends RtpPipeline> {
             source.sinks.delete(subscriberId);
             throw new Error(`${this.kind} source for ${app.id} ended while starting`);
         }
+        // 途中から来た人はキーフレームが来るまで描けない (H.264 の映像源は GOP が長い)。
+        if (isFeedbackTarget(source.pipeline)) source.pipeline.requestKeyFrame();
         return source.rtpPort;
+    }
+
+    /** ブラウザの PLI / 帯域推定を映像源へ (キーフレーム要求・ビットレート変更)。 */
+    feedback(appId: string, subscriberId: string, fb: VideoFeedback, now = Date.now()): void {
+        const source = this.sources.get(appId);
+        if (!source || source.closed || !source.policy || !source.sinks.has(subscriberId)) return;
+        const pipeline = source.pipeline;
+        if (!isFeedbackTarget(pipeline)) return;
+        if (fb.kind === "pli") {
+            if (source.policy.shouldRequestKeyframe(now)) pipeline.requestKeyFrame();
+            return;
+        }
+        const next = source.policy.updateEstimate(subscriberId, fb.bps, now);
+        if (next !== null) pipeline.setBitrate(next);
     }
 
     /** 購読を外す。最後の購読者なら映像源を止める。 */
     release(appId: string, subscriberId: string): void {
         const source = this.sources.get(appId);
         if (!source || !source.sinks.delete(subscriberId)) return;
-        if (source.sinks.size > 0) return;
+        if (source.sinks.size > 0) {
+            // 一番遅い人が抜けたら、残りの人に合わせてビットレートを上げられる。
+            const next = source.policy?.removeSession(subscriberId, Date.now()) ?? null;
+            if (next !== null && isFeedbackTarget(source.pipeline)) source.pipeline.setBitrate(next);
+            return;
+        }
         // 起動中に止めると、起動処理が stop の後で ffmpeg を spawn して取り残す。
         // 起動の決着を待ってから、まだ誰も購読していなければ止める。
         source.ready.then(
@@ -154,8 +193,10 @@ export class SharedRtpSourcePool<P extends RtpPipeline> {
     }
 
     private open(app: AppConfig): Source<P> {
+        const video = app.inAppBridge?.video;
         const source: Source<P> = {
             appId:      app.id,
+            policy:     video ? new VideoFeedbackPolicy({ initial: video.bitrate, min: video.minBitrate, max: video.maxBitrate }) : null,
             udp:        this.createSocket(),
             pipeline:   this.createPipeline(),
             rtpPort:    0,

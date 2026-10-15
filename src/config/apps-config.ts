@@ -158,17 +158,41 @@ const ergoCustosSchema = z.object({
 ///
 /// fps — 動画ストリーム (`GET /stream`) 要求 fps。既定 24。
 ///       snapshot (`GET /screenshot`) には影響しない。
+///
+/// video — 映像の送り方 (spec/feature/webrtc-efficiency.md §7)。
+///   codec "auto": Unity ブリッジならブリッジ内のハードウェア H.264 (`/stream?codec=h264`) を使い、
+///                 使えなければ (415) 従来の生 BGRA + ffmpeg に戻す。ergo は常に BGRA + ffmpeg。
+///   codec "h264": H.264 だけを使う (使えなければ映像を出さない)。"rawvideo": 従来の BGRA + ffmpeg。
+///   width / height: 配信解像度の上限の枠 (ブリッジが縦横比を保って 16 の倍数にする)。
+///   bitrate: 開始のビットレート。ブラウザの推定帯域 (REMB) に合わせて minBitrate〜maxBitrate で上下させる。
+const bridgeVideoSchema = z.object({
+    codec:      z.enum(["auto", "h264", "rawvideo"]).default("auto"),
+    width:      z.number().int().min(64).max(3840).default(1280),
+    height:     z.number().int().min(64).max(2160).default(720),
+    bitrate:    z.number().int().min(100_000).max(50_000_000).default(3_000_000),
+    minBitrate: z.number().int().min(100_000).max(50_000_000).default(300_000),
+    maxBitrate: z.number().int().min(100_000).max(50_000_000).default(6_000_000),
+}).refine((v) => v.minBitrate <= v.bitrate && v.bitrate <= v.maxBitrate, {
+    message: "video: minBitrate <= bitrate <= maxBitrate",
+});
+
+/** video を書かなかったときの既定 (ergoCustos からの正規化でも使う)。 */
+export const DEFAULT_BRIDGE_VIDEO = bridgeVideoSchema.parse({});
+export type BridgeVideoConfig = z.infer<typeof bridgeVideoSchema>;
+
 const inAppBridgeSchema = z.object({
     kind: z.enum(["ergo", "unity"]).default("ergo"),
     host: z.string().default("127.0.0.1"),
     port: z.number().int().min(1).max(65535).optional(),
     /** 動画ストリーム要求 fps (GET /stream?fps=<F>)。既定 24。 */
     fps:  z.number().int().min(1).max(120).default(24),
+    video: bridgeVideoSchema.default({}),
 }).transform((v) => ({
     kind: v.kind,
     host: v.host,
     port: v.port ?? (v.kind === "unity" ? 17778 : 5198),
     fps:  v.fps,
+    video: v.video,
 }));
 
 /// 行動ログ設定。遠隔プレイの操作を JSONL に残し、Commentarii が人間プレイとして取り込む。
@@ -220,7 +244,7 @@ export const appConfigSchema = z.object({
     const bridge = v.inAppBridge
         ?? (v.ergoCustos
             // fps は ergoCustos schema にないので inAppBridge の既定値 24 を補填する。
-            ? { kind: "ergo" as const, host: v.ergoCustos.host, port: v.ergoCustos.port, fps: 24 }
+            ? { kind: "ergo" as const, host: v.ergoCustos.host, port: v.ergoCustos.port, fps: 24, video: DEFAULT_BRIDGE_VIDEO }
             : undefined);
     // ergoCustos を出力型から除去して正規化済み inAppBridge だけを残す。
     const { ergoCustos: _dropped, ...rest } = v;

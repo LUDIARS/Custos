@@ -1,0 +1,60 @@
+// CustosRgbToNv12.compute — 画面 (RGBA) を配信解像度の NV12 に変換する (Nv12Converter.cs)
+//
+// 1 スレッドが横 4 x 縦 2 画素を受け持ち、Y を 2 行ぶん (4 バイト x 2) と UV を 1 行ぶん (U V U V の 4 バイト) 書く。
+// 幅・高さは 16 の倍数 (StreamResolution) なので端の処理は要らない。
+// 色は BT.601 limited range (ブラウザの WebRTC が色情報の無い H.264 を復号するときの既定と合わせる)。
+#pragma kernel RgbToNv12
+
+Texture2D<float4> _Source;
+SamplerState sampler_linear_clamp;
+RWByteAddressBuffer _Output;
+uint _Width;
+uint _Height;
+uint _FlipY;
+uint _ToGamma;
+
+float3 LinearToSrgb(float3 c)
+{
+    return lerp(c * 12.92, 1.055 * pow(c, 1.0 / 2.4) - 0.055, step(0.0031308, c));
+}
+
+float3 Fetch(uint x, uint y)
+{
+    float2 uv = float2((x + 0.5) / _Width, (y + 0.5) / _Height);
+    if (_FlipY != 0) uv.y = 1.0 - uv.y;
+    float3 c = saturate(_Source.SampleLevel(sampler_linear_clamp, uv, 0).rgb);
+    if (_ToGamma != 0) c = saturate(LinearToSrgb(c));
+    return c;
+}
+
+uint ToByte(float v) { return (uint)clamp(round(v), 0.0, 255.0); }
+float LumaY(float3 c) { return 16.0 + 65.481 * c.r + 128.553 * c.g + 24.966 * c.b; }
+float ChromaU(float3 c) { return 128.0 - 37.797 * c.r - 74.203 * c.g + 112.0 * c.b; }
+float ChromaV(float3 c) { return 128.0 + 112.0 * c.r - 93.786 * c.g - 18.214 * c.b; }
+uint Pack(uint a, uint b, uint c, uint d) { return a | (b << 8) | (c << 16) | (d << 24); }
+
+[numthreads(8, 8, 1)]
+void RgbToNv12(uint3 id : SV_DispatchThreadID)
+{
+    uint bx = id.x * 4;
+    uint by = id.y * 2;
+    if (bx >= _Width || by >= _Height) return;
+
+    float3 p0[4];
+    float3 p1[4];
+    [unroll] for (uint i = 0; i < 4; i++)
+    {
+        p0[i] = Fetch(bx + i, by);
+        p1[i] = Fetch(bx + i, by + 1);
+    }
+
+    _Output.Store(by * _Width + bx,
+        Pack(ToByte(LumaY(p0[0])), ToByte(LumaY(p0[1])), ToByte(LumaY(p0[2])), ToByte(LumaY(p0[3]))));
+    _Output.Store((by + 1) * _Width + bx,
+        Pack(ToByte(LumaY(p1[0])), ToByte(LumaY(p1[1])), ToByte(LumaY(p1[2])), ToByte(LumaY(p1[3]))));
+
+    float3 a = (p0[0] + p0[1] + p1[0] + p1[1]) * 0.25;
+    float3 b = (p0[2] + p0[3] + p1[2] + p1[3]) * 0.25;
+    _Output.Store(_Width * _Height + (by / 2) * _Width + bx,
+        Pack(ToByte(ChromaU(a)), ToByte(ChromaV(a)), ToByte(ChromaU(b)), ToByte(ChromaV(b))));
+}

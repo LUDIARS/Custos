@@ -39,6 +39,11 @@ namespace Ludiars.Custos.Bridge.Capture
         private IFrameStreamer    _streamer;
         private bool              _streamPumpRequested;
 
+        // H.264 配信 (/stream?codec=h264)。画面をそのままの大きさで取り、GPU で配信解像度の NV12 にする。
+        private IH264FrameTarget  _h264;
+        private RenderTexture     _fullRt;
+        private readonly Nv12Converter _nv12 = new Nv12Converter();
+
         // ── 初期化 ───────────────────────────────────────────
 
         public void Initialize(int maxLongEdge, IFrameStreamer streamer)
@@ -46,6 +51,16 @@ namespace Ludiars.Custos.Bridge.Capture
             _maxLongEdge = maxLongEdge > 0 ? maxLongEdge : 1280;
             _streamer    = streamer;
         }
+
+        /// <summary>H.264 配信の受け口を付ける (無ければ従来の BGRA 配信だけ)。</summary>
+        public void SetH264Target(IH264FrameTarget target)
+        {
+            _h264 = target;
+        }
+
+        /// <summary>BGRA か H.264 のどちらかに接続中か (接続中だけ毎フレーム取り込む)。</summary>
+        public bool HasActiveStream =>
+            (_streamer != null && _streamer.HasActiveStream) || (_h264 != null && _h264.HasActiveStream);
 
         private void EnsureRenderTexture(int w, int h)
         {
@@ -144,6 +159,9 @@ namespace Ludiars.Custos.Bridge.Capture
         {
             yield return new WaitForEndOfFrame();
 
+            if (_h264 != null && _h264.HasActiveStream && _h264.IsAvailable) CaptureH264();
+            if (_streamer == null || !_streamer.HasActiveStream) yield break;
+
             GetFrameSize(out int rawW, out int rawH);
             ComputeDownscaled(rawW, rawH, _maxLongEdge, out int w, out int h);
             EnsureRenderTexture(w, h);
@@ -162,6 +180,24 @@ namespace Ludiars.Custos.Bridge.Capture
                 // TODO(要検証 #1): flip が必要なら PngEncoder.FlipRows も呼ぶ
                 _streamer.UpdateFrame(data, capturedW, capturedH);
             });
+        }
+
+        /// <summary>画面をそのままの大きさで取り、配信解像度の NV12 にして H.264 の受け口へ渡す。</summary>
+        private void CaptureH264()
+        {
+            GetFrameSize(out int screenW, out int screenH);
+            if (_fullRt == null || _fullRt.width != screenW || _fullRt.height != screenH)
+            {
+                if (_fullRt != null) { _fullRt.Release(); Destroy(_fullRt); }
+                _fullRt = new RenderTexture(screenW, screenH, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB)
+                {
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+            }
+            ScreenCapture.CaptureScreenshotIntoRenderTexture(_fullRt);
+            _h264.GetTargetSize(screenW, screenH, out int w, out int h);
+            var target = _h264;
+            _nv12.Convert(_fullRt, w, h, (nv12, cw, ch) => target.SubmitNv12(nv12, cw, ch));
         }
 
         // ── ストリームポンプ要求 ──────────────────────────
@@ -194,6 +230,13 @@ namespace Ludiars.Custos.Bridge.Capture
                 Destroy(_stagingRt);
                 _stagingRt = null;
             }
+            if (_fullRt != null)
+            {
+                _fullRt.Release();
+                Destroy(_fullRt);
+                _fullRt = null;
+            }
+            _nv12.Dispose();
         }
 
         // ── 内部リクエスト型 ─────────────────────────────

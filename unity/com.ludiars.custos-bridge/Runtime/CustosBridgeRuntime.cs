@@ -99,11 +99,17 @@ namespace Ludiars.Custos.Bridge
 #if ENABLE_INPUT_SYSTEM
             _server.OnPointer = (x, y, button, phase) => pointerInjector.InjectPointer(x, y, button, phase);
 #endif
+            // H.264 配信 (/stream?codec=h264)。ネイティブのエンコーダが使えなければ従来の BGRA だけ。
+            var h264Encoder = new VideoEncoding.H264StreamEncoder();
+            var h264 = new H264Streamer(h264Encoder);
+            provider.SetH264Target(h264);
+            _server.H264Stream = h264;
             _server.Start();
 
             Application.quitting += () =>
             {
                 _server?.Stop();
+                h264Encoder.Dispose();
 #if ENABLE_INPUT_SYSTEM
                 injector.Shutdown();
                 pointerInjector.Shutdown();
@@ -128,7 +134,7 @@ namespace Ludiars.Custos.Bridge
             MainThreadDispatcher.Pump();
 
             // ストリーム接続があれば次フレームキャプチャをリクエスト
-            if (Streamer != null && Streamer.HasActiveStream && Provider != null)
+            if (Provider != null && Provider.HasActiveStream)
             {
                 Provider.RequestStreamPump();
                 Provider.PumpStream(Streamer);
