@@ -42,6 +42,10 @@
 
   <!-- スマホ用の操作メニュー。BOOT 等と Unity の操作・状態をここへ移して表示する (status-menu.js) -->
   <div class="status-menu" id="statusMenu" hidden>
+    <header class="status-menu-header">
+      <span class="status-menu-title">操作</span>
+      <button type="button" class="fw-btn" id="statusMenuClose" title="閉じる">×</button>
+    </header>
     <div class="status-menu-section" id="statusMenuActions"></div>
     <div class="status-menu-section" id="statusMenuUnity"></div>
   </div>

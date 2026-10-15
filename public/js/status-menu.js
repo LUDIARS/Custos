@@ -1,5 +1,6 @@
 /**
- * スマホの操作メニュー。ステータス (IDLE / RUNNING など) を押すとフローティングで開く。
+ * スマホの操作メニュー。ステータス (IDLE / RUNNING など) を押すと、LOG などと同じく画面の下から開く。
+ * × で閉じる。
  *
  * 中身は PC ではヘッダと VIEW にある部品をそのまま移して使う (同じ要素なので操作の配線は 1 つ):
  *   - BOOT / Run / Test / Kill (#headerActions)
@@ -10,7 +11,7 @@
  * (動いている間に開け閉めしたのは、次に状態が変わるまでそのまま)。
  */
 
-export function createStatusMenu({ pill, menu, actionsSlot, unitySlot, headerActions, unityStrip }) {
+export function createStatusMenu({ pill, menu, closeButton, actionsSlot, unitySlot, headerActions, unityStrip }) {
     const homes = [headerActions, unityStrip].map((el) => ({ el, parent: el.parentNode, next: el.nextSibling }));
     let mobile = false;
     let open = true;
@@ -20,6 +21,7 @@ export function createStatusMenu({ pill, menu, actionsSlot, unitySlot, headerAct
         if (!mobile) return;
         setOpen(!open);
     });
+    closeButton.addEventListener("click", () => setOpen(false));
 
     /** layout-mode から呼ぶ。スマホならメニューへ移し、PC なら元へ戻す。 */
     function setMobile(isMobile) {

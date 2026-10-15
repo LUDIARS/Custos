@@ -119,21 +119,30 @@ button.status-pill { cursor: default; font: inherit; font-size: 12px; }
 .status-menu[hidden] { display: none; }
 body.layout-desktop .status-menu { display: none; }
 
-/* スマホ: ステータスを押すとヘッダの下にフローティングで開く */
+/* スマホ: ステータスを押すと、LOG などのシートと同じく画面の下から開く */
 body.layout-mobile button.status-pill { cursor: pointer; }
 body.layout-mobile button.status-pill::after { content: " ▾"; }
 body.layout-mobile button.status-pill.menu-open::after { content: " ▴"; }
 body.layout-mobile .status-menu {
-  position: fixed; left: 8px; right: 8px; top: 52px;
+  position: fixed; left: 0; right: 0; bottom: 0;
   z-index: 70;
   display: flex; flex-direction: column; gap: 8px;
   max-height: 70vh; overflow: auto;
-  padding: 10px;
+  padding: 0 10px 12px;
   background: var(--bg-card);
-  border: 1px solid var(--accent);
-  border-radius: 10px;
-  box-shadow: 0 12px 32px rgba(0,0,0,0.55);
+  border-top: 1px solid var(--accent);
+  border-radius: 12px 12px 0 0;
+  box-shadow: 0 -8px 24px rgba(0,0,0,0.45);
 }
+.status-menu-header {
+  position: sticky; top: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  margin: 0 -10px; padding: 6px 6px 6px 14px;
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--border);
+}
+.status-menu-title { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: var(--fg-dim); }
+body.layout-mobile .status-menu .fw-btn { display: inline-block; }
 body.layout-mobile .status-menu .header-actions { display: flex; }
 body.layout-mobile .status-menu .header-actions button { flex: 1 1 0; padding: 8px 0; }
 body.layout-mobile .status-menu .unity-strip { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }

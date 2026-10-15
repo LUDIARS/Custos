@@ -46,6 +46,7 @@ const log = (text, isError = false) => logView.meta(`${text}\n`, isError);
 const statusMenu = createStatusMenu({
     pill: $("statusPill"),
     menu: $("statusMenu"),
+    closeButton: $("statusMenuClose"),
     actionsSlot: $("statusMenuActions"),
     unitySlot: $("statusMenuUnity"),
     headerActions: $("headerActions"),

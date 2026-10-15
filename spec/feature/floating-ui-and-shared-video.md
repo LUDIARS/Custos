@@ -27,7 +27,7 @@
 
 ### 1.3 スマホの操作メニュー
 
-スマホ表示では、ヘッダのステータス (IDLE / RUNNING など) を押すとフローティングの操作メニューが開く (`public/js/status-menu.js`)。
+スマホ表示では、ヘッダのステータス (IDLE / RUNNING など) を押すと、LOG などのシートと同じく画面の下から操作メニューが開く (`public/js/status-menu.js`)。× で閉じる。
 
 - 中身: BOOT / Run / Test / Kill と、Unity の状態 (bridge・版・モード・シーン) と Play / Stop / Recompile / Refresh / Send to Session。
   PC ではヘッダと VIEW にある同じ要素を、スマホ表示のときだけメニューへ移す (配線は 1 つ)。
