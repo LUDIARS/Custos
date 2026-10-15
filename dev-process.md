@@ -1,6 +1,11 @@
 # Dev process marker
 
 このファイルがあると Excubitor / AI agent が Custos を background 起動できる。
+
+**Excubitor の定義 (`excubitor.catalog.yaml`) はこのリポに置かない。** Custos は使う側
+(テスト対象のゲームのリポ) ごとに apps ファイル・認証・待ち受けが違うため、使う側のリポの
+catalog に `code` を分けて定義する (例: `CUSTOS_APPS_FILE` で自分の apps ファイルを渡す)。
+ここに汎用の定義を置くと、同じポートを持つ使う側の定義と衝突し、片方の再起動がもう片方を止める。
 catalog の `runtime: dev-process-md` はこのファイルを読む。無いと
 `ENOENT: dev-process.md` で起動そのものが失敗する。
 
