@@ -45,7 +45,7 @@ npm run start
 - [x] **Unity ブリッジ** (`unity/com.ludiars.custos-bridge` UPM。Editor Game
       View / Runtime Camera をフックし `/stream` で WebRTC 動画、`/key` で
       InputSystem 注入。UnityRemote 型、port 17778)
-- [x] **遠隔プレイ** (配信画面の「遠隔プレイ」トグル。映像上のマウス / タッチを
+- [x] **遠隔プレイ** (常に有効で自動判定。映像上のマウス / タッチを
       ブリッジ `/pointer` へ、映像にフォーカス中の物理キーを `/key` へ送る。
       [設計](spec/feature/remote-play-and-play-log.md))
 - [x] **行動ログ** (app 設定 `playLog`。操作とゲーム状態 (`/state`) を

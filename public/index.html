@@ -44,7 +44,7 @@
   <div class="status-menu" id="statusMenu" hidden>
     <header class="status-menu-header">
       <span class="status-menu-title">操作</span>
-      <button type="button" class="fw-btn" id="statusMenuClose" title="閉じる">×</button>
+      <button type="button" class="fw-btn status-menu-close" id="statusMenuClose" title="閉じる" aria-label="閉じる">×</button>
     </header>
     <div class="status-menu-section" id="statusMenuActions"></div>
     <div class="status-menu-section" id="statusMenuUnity"></div>
@@ -97,10 +97,6 @@
               </div>
               <div class="spectator-banner" id="spectatorBanner" hidden>観戦中 — 他のユーザがプレイしています</div>
             </div>
-            <div class="play-bar">
-              <label class="play-toggle"><input type="checkbox" id="playToggle" checked /> 遠隔プレイ</label>
-              <span class="play-hint" id="playHint"></span>
-            </div>
           </section>
         </div>
 
@@ -122,6 +118,8 @@
     <section class="fw" data-window="pad" aria-label="PAD">
       <header class="fw-titlebar">
         <span class="fw-title">PAD</span>
+        <!-- 遠隔プレイの操作説明 (play-input.js)。遠隔プレイは常に有効で自動判定 -->
+        <span class="play-hint" id="playHint"></span>
         <button type="button" class="fw-btn" data-fw-minimize title="最小化">–</button>
         <button type="button" class="fw-btn" data-fw-close title="閉じる">×</button>
       </header>

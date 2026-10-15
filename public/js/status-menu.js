@@ -9,6 +9,7 @@
  *
  * 開始時と、ゲームが動いていない間は開いた状態にする。ゲームが動き出したら閉じる
  * (動いている間に開け閉めしたのは、次に状態が変わるまでそのまま)。
+ * × で閉じたときは閉じるを優先し、ステータスを押して開くまで自動では開かない。
  */
 
 export function createStatusMenu({ pill, menu, closeButton, actionsSlot, unitySlot, headerActions, unityStrip }) {
@@ -16,12 +17,17 @@ export function createStatusMenu({ pill, menu, closeButton, actionsSlot, unitySl
     let mobile = false;
     let open = true;
     let gameRunning = null;
+    let closedByUser = false;
 
     pill.addEventListener("click", () => {
         if (!mobile) return;
+        closedByUser = open;
         setOpen(!open);
     });
-    closeButton.addEventListener("click", () => setOpen(false));
+    closeButton.addEventListener("click", () => {
+        closedByUser = true;
+        setOpen(false);
+    });
 
     /** layout-mode から呼ぶ。スマホならメニューへ移し、PC なら元へ戻す。 */
     function setMobile(isMobile) {
@@ -35,11 +41,12 @@ export function createStatusMenu({ pill, menu, closeButton, actionsSlot, unitySl
         render();
     }
 
-    /** ゲームが動いているか。変わったときだけ開閉を決め直す (動いていなければ開く)。 */
+    /** ゲームが動いているか。変わったときだけ開閉を決め直す (動いていなければ開く。ただし × で閉じていたら開かない)。 */
     function setGameRunning(running) {
         if (running === gameRunning) return;
         gameRunning = running;
-        setOpen(!running);
+        if (running) setOpen(false);
+        else if (!closedByUser) setOpen(true);
     }
 
     function setOpen(next) {

@@ -39,13 +39,14 @@
 
 ### 1.3 フロントエンド
 
-- 「遠隔プレイ」トグル (ストリーム表示部)。**既定 ON** (ブラウザに保存)。OFF にすると入力を止め、持っている操作権を手放す (§1.4)。ON の間:
+- 遠隔プレイは**常に有効で自動判定** (切り替えるトグルは置かない。OFF にする意味が無いため、2026-10-15 neco 指示)。
+  app を選んでいて操作権を持てる (player / free) ときに送り、観戦中は送らない。操作の説明は PAD の見出しに出す (`#playHint`)。送る内容:
   - 映像 (`<video>` / snapshot `<img>`) 上の pointerdown / pointermove / pointerup を正規化座標で送る。
     `object-fit: contain` のレターボックスを除いた映像矩形で割る (`public/js/play-input.js` の純関数、vitest 対象)。
     move は押下中・非押下中とも 30Hz に間引く。contextmenu は抑止。
   - 映像にフォーカスがある間の keydown / keyup を `KeyboardEvent.code` → Custos のキー名 (`KEY_TABLE` 名) に変換して送る。
     auto-repeat は捨てる。未対応キーは送らない。フォーカスが外れたら押下中のキーを全て up で送る (押しっぱなし事故防止)。
-- `allowMouse` / `allowKeyboard` が false の app はトグル時にその旨を表示し、その種別は送らない。
+- `allowMouse` / `allowKeyboard` が false の app は PAD の見出しにその旨を表示し、その種別は送らない。
 - **タッチ (スマホ前提)**: 1 本指のタッチをマウス操作に変換する (`touchGestureStep`、`public/js/play-input-logic.js`、vitest 対象)。
   - タップ (動かさずに離す) → 左クリック (down → up)
   - ドラッグ (8px 以上動かす) → 左ボタンを押したまま移動
@@ -64,7 +65,8 @@ Custos は複数人が同時に操作することを想定しない。app ごと
 - **spectator (観戦)**: 他の接続が player の間の接続。映像・ログは見られるが、入力は WS で捨てられ、Unity の状態を変える
   REST (`compile` / `refresh` / `play` / `stop` / `publish-capture`) は 409 になる (`src/routes/control-guard.ts`)。
 - **free**: 誰も操作していない。最初に操作した接続が player になる。Unity の REST は誰でも通る。
-- 操作権は player が「遠隔プレイ」を OFF にする (`control { want: false }`)、unsubscribe する、切断するで解放される。
+- 操作権は player が unsubscribe する (app を切り替える)、切断するで解放される。`control { want: false }` も受け付ける
+  (画面から手放す操作は今は置いていない)。
   奪う手段は持たない (観戦者は player が手放すのを待つ)。
 - WS: 接続直後に `welcome { clientId }`、subscribe 直後と持ち主が変わるたびに `control { appId, role }` を送る。
   ブラウザは REST に `x-custos-client: <clientId>` を付ける (これで REST の呼び出し元を WS の接続と結び付ける)。

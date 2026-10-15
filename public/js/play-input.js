@@ -6,8 +6,8 @@
  * - タッチ: タップ=左クリック、ドラッグ=左ボタンを押したまま移動、長押し=右クリック
  *   (判定は play-input-logic.js の touchGestureStep)
  *
- * 「遠隔プレイ」トグルは既定 ON。OFF にすると入力を止め、持っている操作権を手放す。
- * 観戦中 (他の接続がプレイ中) は何も送らない。
+ * 遠隔プレイは常に有効で、送るかどうかは自動で決める (app を選んでいて、操作権を持てるときだけ送る)。
+ * 観戦中 (他の接続がプレイ中) は何も送らない。操作の説明はパッドの見出しに出す。
  */
 
 import {
@@ -21,12 +21,10 @@ import {
 } from "/js/play-input-logic.js";
 
 const MOVE_INTERVAL_MS = 33;   // 約 30Hz
-const ENABLED_KEY = "custos.remotePlay";
 
 /**
  * @param {{
  *   frame: HTMLElement,
- *   toggle: HTMLInputElement,
  *   hint: HTMLElement,
  *   getMedia: () => (HTMLVideoElement | HTMLImageElement | null),
  *   getAppId: () => (string | null),
@@ -35,8 +33,7 @@ const ENABLED_KEY = "custos.remotePlay";
  *   send: (msg: object) => void,
  * }} deps
  */
-export function createPlayInput({ frame, toggle, hint, getMedia, getAppId, getConfig, canOperate, send }) {
-    let enabled = readEnabled();
+export function createPlayInput({ frame, hint, getMedia, getAppId, getConfig, canOperate, send }) {
     let lastMoveAt = 0;
     let heldButton = null;
     let lastPos = { x: 0, y: 0 };
@@ -46,14 +43,12 @@ export function createPlayInput({ frame, toggle, hint, getMedia, getAppId, getCo
     let longPressTimer = null;
 
     frame.tabIndex = 0;
-    toggle.checked = enabled;
 
-    toggle.addEventListener("change", () => setEnabled(toggle.checked));
     frame.addEventListener("pointerdown", onPointerDown);
     frame.addEventListener("pointermove", onPointerMove);
     frame.addEventListener("pointerup", onPointerUp);
     frame.addEventListener("pointercancel", onPointerUp);
-    frame.addEventListener("contextmenu", (ev) => { if (enabled) ev.preventDefault(); });
+    frame.addEventListener("contextmenu", (ev) => ev.preventDefault());
     frame.addEventListener("keydown", (ev) => onKey(ev, true));
     frame.addEventListener("keyup", (ev) => onKey(ev, false));
     frame.addEventListener("blur", releaseAll);
@@ -66,25 +61,11 @@ export function createPlayInput({ frame, toggle, hint, getMedia, getAppId, getCo
     }
 
     function active() {
-        return enabled && canOperate() && getAppId() !== null;
-    }
-
-    function setEnabled(on) {
-        if (!on) {
-            releaseAll();
-            const appId = getAppId();
-            // 遠隔プレイをやめたら操作権を手放し、観戦していた人が操作できるようにする。
-            if (appId) send({ type: "control", appId, want: false });
-        }
-        enabled = on;
-        writeEnabled(on);
-        refresh();
-        if (on) frame.focus();
+        return canOperate() && getAppId() !== null;
     }
 
     function refresh() {
         frame.classList.toggle("play-active", active());
-        if (!enabled) { hint.textContent = "遠隔プレイ OFF — 映像を見るだけ"; return; }
         if (!canOperate()) { hint.textContent = "観戦中 — 他のユーザがプレイしています"; return; }
         const a = allow();
         const parts = [];
@@ -220,20 +201,4 @@ export function createPlayInput({ frame, toggle, hint, getMedia, getAppId, getCo
             refresh();
         },
     };
-}
-
-function readEnabled() {
-    try {
-        return localStorage.getItem(ENABLED_KEY) !== "off";
-    } catch {
-        return true;   // ストレージが使えなければ既定の ON
-    }
-}
-
-function writeEnabled(on) {
-    try {
-        localStorage.setItem(ENABLED_KEY, on ? "on" : "off");
-    } catch {
-        /* 保存できなくても今のページでは効く。次回は既定の ON に戻るだけ */
-    }
 }

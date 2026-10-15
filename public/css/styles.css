@@ -25,6 +25,8 @@ html {
    * だけでは効かないため touch-action でも止める)。pan-* は許して
    * ふつうのスクロールは保つ。 */
   touch-action: pan-x pan-y;
+  /* ページ自体の引っ張りスクロール (バウンス) と更新を止める。touch-guard.js でも止める */
+  overscroll-behavior: none;
 }
 body {
   background: var(--bg);
@@ -174,15 +176,12 @@ body.unity-mode .unity-only { display: flex !important; }
 .stream-frame:focus { outline: none; }
 .stream-frame.play-active { cursor: crosshair; box-shadow: inset 0 0 0 2px var(--accent, #4aa3ff); }
 .stream-frame.play-active #streamVideo, .stream-frame.play-active #streamImage { touch-action: none; user-select: none; }
-.play-bar {
-  display: flex; align-items: center; gap: 10px;
-  padding: 4px 10px;
-  border-top: 1px solid var(--border);
-  font-size: 12px; color: var(--fg-faint);
-  background: var(--bg-card);
+/* 遠隔プレイの操作説明。PAD の見出しに出す */
+.play-hint {
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px; color: var(--fg-faint);
 }
-.play-toggle { display: inline-flex; align-items: center; gap: 4px; color: var(--fg, inherit); cursor: pointer; }
-.play-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stream-placeholder {
   text-align: center;
   color: var(--fg-faint);

@@ -20,6 +20,7 @@ import { createUnityPanel } from "/js/unity-panel.js";
 import { createSettingsPanel } from "/js/settings-panel.js";
 import { createWsClient } from "/js/ws-client.js";
 import { createStatusMenu } from "/js/status-menu.js";
+import { installTouchGuard } from "/js/touch-guard.js";
 
 const $ = (id) => document.getElementById(id);
 const appSelect = $("appSelect");
@@ -39,6 +40,7 @@ const state = {
 };
 
 // ─── 部品 ───────────────────────────────────────
+installTouchGuard();
 const logView = createLogView({ logEl: $("logStream"), testEl: $("testStream") });
 setApiLogger(logView.append);
 const log = (text, isError = false) => logView.meta(`${text}\n`, isError);
@@ -119,7 +121,6 @@ const pad = createVirtualPad({
 
 const playInput = createPlayInput({
     frame: $("streamFrame"),
-    toggle: $("playToggle"),
     hint: $("playHint"),
     getMedia: () => stream.getMedia(),
     getAppId: () => state.appId,

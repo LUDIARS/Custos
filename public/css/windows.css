@@ -73,12 +73,23 @@ body.layout-desktop.fw-dragging video { pointer-events: none; }
 
 /* ─── スマホ: ヘッダ / 映像 / 操作部分の縦構成 ─── */
 body.layout-mobile .desktop-only { display: none; }
-body.layout-mobile .app-header { padding: 6px 10px; gap: 6px; }
-body.layout-mobile .app-header .subtitle { display: none; }
-body.layout-mobile .header-controls { gap: 4px; }
-body.layout-mobile #appSelect { min-width: 0; flex: 1 1 140px; }
+/* ヘッダは 1 行に収める。ゲーム選択は固定幅にし (選んだ名前の長さで幅が変わらない)、LOG / TEST などが折り返さないようにする。
+   幅が足りない分はステータスが縮む (省略表示)。タイトルは幅を空けるため出さない。 */
+body.layout-mobile .app-header { padding: 6px 10px; gap: 6px; flex-wrap: nowrap; }
+body.layout-mobile .app-header .title { display: none; }
+body.layout-mobile .header-controls { gap: 4px; flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; }
+body.layout-mobile #appSelect {
+  flex: 0 0 120px; width: 120px; min-width: 0; padding: 4px 6px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 body.layout-mobile .header-controls button { padding: 4px 8px; }
-body.layout-mobile .window-toggles { margin-left: 0; }
+body.layout-mobile button.status-pill,
+body.layout-mobile .role-badge {
+  flex: 0 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+body.layout-mobile .window-toggles { margin-left: 0; flex: 0 0 auto; flex-wrap: nowrap; gap: 4px; }
+body.layout-mobile .window-toggle { padding: 4px 6px; font-size: 11px; }
 body.layout-mobile .app-footer { display: none; }
 
 body.layout-mobile .desk {
@@ -94,6 +105,7 @@ body.layout-mobile .fw[data-window="pad"]  { flex: 0 0 auto; display: flex; max-
 body.layout-mobile .fw[data-window="view"] .fw-titlebar { display: none; }
 body.layout-mobile .fw[data-window="pad"] .fw-title { display: none; }
 body.layout-mobile .fw[data-window="pad"] .fw-titlebar { justify-content: flex-end; padding: 2px 6px; }
+.fw[data-window="pad"] .fw-title { flex: 0 0 auto; }
 /* スマホでは Unity の Hierarchy / Console は畳み、映像と操作を優先する (LOG シートで見る)。 */
 body.layout-mobile .unity-hierarchy-pane,
 body.layout-mobile .unity-console-pane { display: none !important; }
@@ -142,7 +154,14 @@ body.layout-mobile .status-menu {
   border-bottom: 1px solid var(--border);
 }
 .status-menu-title { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: var(--fg-dim); }
-body.layout-mobile .status-menu .fw-btn { display: inline-block; }
+/* hidden を最優先にする。上の display: flex の方が詳細度が高く、× で閉じても消えなかった。 */
+body.layout-mobile .status-menu[hidden] { display: none; }
+/* × は指で確実に押せる大きさにする (44px 角以上)。 */
+body.layout-mobile .status-menu .status-menu-close {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 48px; min-height: 44px; padding: 0 12px;
+  font-size: 24px; line-height: 1;
+}
 body.layout-mobile .status-menu .header-actions { display: flex; }
 body.layout-mobile .status-menu .header-actions button { flex: 1 1 0; padding: 8px 0; }
 body.layout-mobile .status-menu .unity-strip { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
