@@ -18,6 +18,12 @@ namespace Ludiars.Custos.Bridge
         private static readonly ConcurrentQueue<Action> _queue = new ConcurrentQueue<Action>();
 
         /// <summary>
+        /// Pump の最後に毎回 (キューが空でも) 呼ばれる。保留した入力の反映など、毎フレームの後始末用。
+        /// main thread からだけ購読・解除すること。
+        /// </summary>
+        public static event Action AfterPump;
+
+        /// <summary>
         /// バックグラウンドスレッドから安全に呼べる。
         /// </summary>
         public static void Enqueue(Action action)
@@ -42,6 +48,14 @@ namespace Ludiars.Custos.Bridge
                 {
                     Debug.LogError($"[CustosBridge] MainThreadDispatcher action threw: {e}");
                 }
+            }
+            try
+            {
+                AfterPump?.Invoke();
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[CustosBridge] MainThreadDispatcher AfterPump threw: {e}");
             }
         }
     }

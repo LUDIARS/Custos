@@ -30,10 +30,11 @@ const MOVE_INTERVAL_MS = 33;   // 約 30Hz
  *   getAppId: () => (string | null),
  *   getConfig: () => (object | null),
  *   canOperate: () => boolean,
+ *   isGameStopped: () => boolean,
  *   send: (msg: object) => void,
  * }} deps
  */
-export function createPlayInput({ frame, hint, getMedia, getAppId, getConfig, canOperate, send }) {
+export function createPlayInput({ frame, hint, getMedia, getAppId, getConfig, canOperate, isGameStopped, send }) {
     let lastMoveAt = 0;
     let heldButton = null;
     let lastPos = { x: 0, y: 0 };
@@ -66,7 +67,14 @@ export function createPlayInput({ frame, hint, getMedia, getAppId, getConfig, ca
 
     function refresh() {
         frame.classList.toggle("play-active", active());
+        hint.classList.toggle("stopped", false);
         if (!canOperate()) { hint.textContent = "観戦中 — 他のユーザがプレイしています"; return; }
+        // 止まっているゲームに送っても何も起きないので、まずそれを伝える。
+        if (getAppId() !== null && isGameStopped()) {
+            hint.classList.toggle("stopped", true);
+            hint.textContent = "⏸ ゲームが止まっています — ステータスの操作メニューで Play / Run";
+            return;
+        }
         const a = allow();
         const parts = [];
         parts.push(a.mouse ? "タップ / クリックで操作 (長押し=右クリック)" : "マウス操作: この app は無効 (input.allowMouse)");
@@ -193,6 +201,10 @@ export function createPlayInput({ frame, hint, getMedia, getAppId, getConfig, ca
         /** app が切り替わったら押下を離して表示を更新する。 */
         onAppChanged() {
             releaseAll();
+            refresh();
+        },
+        /** ゲームの動作状態 (Play / run) が変わったら表示を更新する。 */
+        onGameStateChanged() {
             refresh();
         },
         /** 操作権が変わったら表示を更新する。観戦になったら押下を捨てる (送っても無視される)。 */

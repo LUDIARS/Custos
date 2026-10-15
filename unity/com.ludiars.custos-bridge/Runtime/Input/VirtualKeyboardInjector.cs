@@ -28,6 +28,8 @@ namespace Ludiars.Custos.Bridge.Input
         private Keyboard      _virtualKeyboard;
         private KeyboardState _pressedState;
         private bool          _initialized;
+        // 押してすぐ離したキーの離しを、ゲームが押下を見られるまで保留する (KeyHoldScheduler 参照)。
+        private readonly KeyHoldScheduler _hold = new KeyHoldScheduler();
 
         // ── ライフサイクル ────────────────────────────────
 
@@ -38,6 +40,7 @@ namespace Ludiars.Custos.Bridge.Input
             _virtualKeyboard = InputSystem.AddDevice<Keyboard>("CustosBridge Keyboard");
             _pressedState    = new KeyboardState();
             _initialized     = true;
+            MainThreadDispatcher.AfterPump += FlushDueReleases;
             Debug.Log("[CustosBridge] VirtualKeyboardInjector: virtual keyboard device added.");
         }
 
@@ -45,6 +48,7 @@ namespace Ludiars.Custos.Bridge.Input
         public void Shutdown()
         {
             if (!_initialized) return;
+            MainThreadDispatcher.AfterPump -= FlushDueReleases;
             if (_virtualKeyboard != null && _virtualKeyboard.added)
             {
                 InputSystem.RemoveDevice(_virtualKeyboard);
@@ -83,12 +87,35 @@ namespace Ludiars.Custos.Bridge.Input
             // タイミングのズレがあっても次イベントで自己修復する。
             // フォーカスが無くても入力がゲームに届くようにする (RemoteInputFocusPolicy 参照)。
             RemoteInputFocusPolicy.Apply();
+            if (down)
+            {
+                _hold.OnDown((int)key, Time.frameCount, Time.realtimeSinceStartup);
+            }
+            else if (!_hold.OnUp((int)key, Time.frameCount, Time.realtimeSinceStartup))
+            {
+                return true;   // 離しは保留。FlushDueReleases が後のフレームで反映する
+            }
+            Apply(key, down);
+            return true;
+        }
+
+        /// <summary>保留していた離しのうち、押下がゲームに見えたものを反映する (Pump の後に毎回呼ばれる)。</summary>
+        private void FlushDueReleases()
+        {
+            if (!_initialized || _virtualKeyboard == null || !_hold.HasPending) return;
+            foreach (var key in _hold.TakeDueReleases(Time.frameCount, Time.realtimeSinceStartup))
+            {
+                Apply((Key)key, false);
+            }
+        }
+
+        private void Apply(Key key, bool down)
+        {
             _pressedState.Set(key, down);
             // ゲームが Keyboard.current を読む場合に備えて、仮想キーボードを current にする
             // (物理キーボードが current のままだと注入した入力が見られない)。
             _virtualKeyboard.MakeCurrent();
             InputSystem.QueueStateEvent(_virtualKeyboard, _pressedState);
-            return true;
         }
     }
 }

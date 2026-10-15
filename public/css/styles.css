@@ -182,6 +182,7 @@ body.unity-mode .unity-only { display: flex !important; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: 11px; color: var(--fg-faint);
 }
+.play-hint.stopped { color: var(--warn); font-weight: 700; }
 .stream-placeholder {
   text-align: center;
   color: var(--fg-faint);

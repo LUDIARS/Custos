@@ -39,6 +39,8 @@
 
 ### 1.3 フロントエンド
 
+- **ゲームが止まっている間**は PAD の見出しに「⏸ ゲームが止まっています」と出す (2026-10-15)。Unity ブリッジの app は Play
+  していないとき、それ以外は run が動いていないとき。状態がまだ届いていない間は出さない (`isGameStopped`、`public/js/app.js`)。
 - 遠隔プレイは**常に有効で自動判定** (切り替えるトグルは置かない。OFF にする意味が無いため、2026-10-15 neco 指示)。
   app を選んでいて操作権を持てる (player / free) ときに送り、観戦中は送らない。操作の説明は PAD の見出しに出す (`#playHint`)。送る内容:
   - 映像 (`<video>` / snapshot `<img>`) 上の pointerdown / pointermove / pointerup を正規化座標で送る。

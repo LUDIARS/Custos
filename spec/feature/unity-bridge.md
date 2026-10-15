@@ -236,6 +236,15 @@ InputSystem.RemoveDevice(virtualKeyboard);
   単純化するため dispatcher 経由に統一する。**要検証**: 1.14 での thread-safety 記述)。
 - queue されたイベントは次の `InputSystem.Update()` (既定: dynamic update) で反映される。
   反映レイテンシは最大 1 フレームで、テストランナー用途では十分。
+- **短いタップの離しを保留する (2026-10-15)**: 遠隔のタップは押下 / 解放の `/key` がほぼ同時に届き、dispatcher が
+  同じポンプで両方を反映すると、押されているかを毎フレーム見るゲーム (`Keyboard.current[key].isPressed`) が
+  押下を見逃す。押してから `MinHoldFrames` (2) フレーム経つまでの離しは保留し、`MainThreadDispatcher.AfterPump`
+  (毎ポンプの最後) で経ったものから反映する。フレームが進まない状況 (Edit モード等) で押しっぱなしにならないよう、
+  押してから `MaxHoldSeconds` (0.25 秒) でも反映する。保留中に同じキーが押されたら離しは取り消す
+  (`Runtime/Input/KeyHoldScheduler.cs`、EditMode テスト `Tests/KeyHoldSchedulerTests.cs`)。
+- **受けた入力のログ (2026-10-15)**: `/key` (`code` と `down`) と `/pointer` の down / up (move は残さない) を、
+  受けるたびに `[CustosBridge] input …` として Editor.log / Player.log に 1 行残す (スタックトレースなし)。
+  遠隔の入力がブリッジまで届いたかをこれで確かめる。
 - **Editor 固有**: PlayMode で Game View が非フォーカスだと入力が処理されない設定がある。
   bridge 有効時は `InputEditorUserSettings.lockInputToGameView = true` を推奨設定として
   ドキュメント化する (自動変更はしない — ユーザ設定を黙って書き換えない)。

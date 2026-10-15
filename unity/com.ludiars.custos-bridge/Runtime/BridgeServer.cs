@@ -331,6 +331,8 @@ namespace Ludiars.Custos.Bridge
             // fire-and-forget: dispatcher に enqueue して即 200 を返す
             MainThreadDispatcher.Enqueue(() =>
             {
+                // 遠隔の入力が届いたかを Editor.log で確かめられるよう 1 行だけ残す (スタックトレースなし)。
+                LogInput("/key code={0} down={1}", payload.code, payload.down);
                 _onKey?.Invoke(payload.code, payload.down, success =>
                 {
                     if (!success)
@@ -339,6 +341,12 @@ namespace Ludiars.Custos.Bridge
             });
 
             HttpJson.WriteJson(res, 200, "{\"ok\":true}");
+        }
+
+        /// <summary>受けた入力を 1 行で残す (main thread から呼ぶ)。</summary>
+        private static void LogInput(string format, params object[] args)
+        {
+            Debug.LogFormat(LogType.Log, LogOption.NoStacktrace, null, "[CustosBridge] input " + format, args);
         }
 
         // ── /pointer ─────────────────────────────────────
@@ -369,7 +377,13 @@ namespace Ludiars.Custos.Bridge
                 return;
             }
 
-            MainThreadDispatcher.Enqueue(() => onPointer(payload.x, payload.y, payload.button, payload.phase));
+            MainThreadDispatcher.Enqueue(() =>
+            {
+                // move は数が多いので残さない。押す・離すだけ。
+                if (payload.phase != "move")
+                    LogInput("/pointer {0} {1} ({2:0.00}, {3:0.00})", payload.button, payload.phase, payload.x, payload.y);
+                onPointer(payload.x, payload.y, payload.button, payload.phase);
+            });
             HttpJson.WriteJson(res, 200, "{\"ok\":true}");
         }
 

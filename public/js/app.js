@@ -139,6 +139,7 @@ const playInput = createPlayInput({
     getAppId: () => state.appId,
     getConfig: () => state.config,
     canOperate: () => control.canOperate(),
+    isGameStopped: () => isGameStopped(),
     send: (msg) => ws.send(msg),
 });
 
@@ -245,6 +246,16 @@ function applyStatus(status) {
 function updateGameRunning() {
     const running = state.config?.hasUnityBridge ? state.unityPlaying === true : state.lifecycle === "running";
     statusMenu.setGameRunning(running);
+    playInput.onGameStateChanged();
+}
+
+/**
+ * ゲームが止まっていると分かっているか (PAD の見出しに出す)。状態がまだ届いていない (null) 間は止まっているとしない。
+ * Unity ブリッジの app は Play していない、それ以外は run が動いていない。
+ */
+function isGameStopped() {
+    if (state.config?.hasUnityBridge) return state.unityPlaying === false;
+    return state.lifecycle !== null && state.lifecycle !== "running";
 }
 
 function updateActionButtons() {
