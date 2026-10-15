@@ -36,6 +36,16 @@ namespace Ludiars.Custos.Bridge.Tests
         }
 
         [Test]
+        public void FramesFasterThanTheStreamFps_AreDropped_ButKeyframesAreNot()
+        {
+            var gate = new StaticFrameGate { FrameIntervalMs = 33 };   // 30fps
+            Assert.IsTrue(gate.ShouldEncode(true, false, 0));
+            Assert.IsFalse(gate.ShouldEncode(true, false, 16));          // 60Hz の更新は半分捨てる
+            Assert.IsTrue(gate.ShouldEncode(true, false, 33));
+            Assert.IsTrue(gate.ShouldEncode(false, true, 40));           // キーフレーム要求は待たせない
+        }
+
+        [Test]
         public void SameFrame_ComparesContentAndLength()
         {
             Assert.IsTrue(StaticFrameGate.SameFrame(new byte[] { 1, 2, 3 }, new byte[] { 1, 2, 3 }));

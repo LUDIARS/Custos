@@ -197,6 +197,7 @@ namespace Ludiars.Custos.Bridge.VideoEncoding
                 if (bitrateChanged) CustosH264Native.ch264_set_bitrate(_encoder, bitrate);
 
                 bool key = _keyRequested;
+                _gate.FrameIntervalMs = 1000 / Math.Max(1, fps);
                 bool changed = !StaticFrameGate.SameFrame(frame, _previous);
                 if (_gate.ShouldEncode(changed, key, _clock.ElapsedMilliseconds))
                 {

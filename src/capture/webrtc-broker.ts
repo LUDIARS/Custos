@@ -243,6 +243,9 @@ export class WebRTCBroker extends EventEmitter {
         const onState = (state: string) => {
             diag.pcStates.push(`${Date.now() - diag.createdAt}ms:${state}`);
             log.info({ sessionId, state, pcStateHistory: diag.pcStates }, "pc state");
+            // つながった時点でキーフレームを要求する。接続前に出た IDR (映像源の起動直後・途中参加時) は
+            // DTLS が張れる前なので届いておらず、GOP の長い H.264 の映像源だと次の IDR まで描けない。
+            if (state === "connected") this.sources.feedback(app.id, sessionId, { kind: "pli" });
             if (state === "failed" || state === "disconnected" || state === "closed") {
                 this.closeSession(sessionId);
             }
