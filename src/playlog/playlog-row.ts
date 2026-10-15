@@ -8,7 +8,8 @@
 
 import type { PointerButton, PointerPhase } from "../capture/ergo-custos-client.js";
 
-export type PlayLogRowKind = "start" | "input" | "state" | "end";
+/** `comment` は観戦者などの感想 (§1.5)。本文は `comment` 列、送った人はハッシュで `commenter` 列。 */
+export type PlayLogRowKind = "start" | "input" | "state" | "comment" | "end";
 export type PlayLogEndReason = "unsubscribe" | "disconnect" | "idle" | "exit" | "shutdown";
 
 /** 記録対象の操作。 */

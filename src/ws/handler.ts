@@ -28,6 +28,7 @@ import type {
 import { sendKey, sendClick, sendPointer } from "../input/forwarder.js";
 import type { PlayLogRecorder } from "../playlog/playlog-recorder.js";
 import { isPointerMessage } from "./pointer-message.js";
+import { canPostComment, isCommentMessage, normalizeCommentText } from "./comment-message.js";
 import { getCernereAuth, type VerifiedUser } from "../auth/cernere-auth.js";
 import type { ScreenshotStreamer, ScreenshotFrame } from "../capture/screenshot-stream.js";
 import type { ControlLease } from "../input/control-lease.js";
@@ -39,6 +40,8 @@ interface Session {
     ws:    WebSocket;
     appIds: Set<string>;
     user:  VerifiedUser;
+    /** 最後に感想を送った時刻 (連投の制限用)。 */
+    lastCommentAt: number | null;
 }
 
 export interface WsBrokerDeps {
@@ -70,6 +73,7 @@ export function attachWebSocketBroker(
             ws,
             appIds: new Set(),
             user,
+            lastCommentAt: null,
         };
         sessions.set(session.id, session);
         log.info({ sessionId: session.id, userId: user.id }, "ws connected");
@@ -84,7 +88,7 @@ export function attachWebSocketBroker(
                 send(ws, { type: "error", message: "invalid JSON" });
                 return;
             }
-            handleClient(session, msg, deps).catch((err) => {
+            handleClient(session, msg, deps, broadcastToApp).catch((err) => {
                 log.warn({ err }, "client message handler failed");
                 send(ws, { type: "error", message: errMsg(err) });
             });
@@ -99,6 +103,13 @@ export function attachWebSocketBroker(
             log.info({ sessionId: session.id }, "ws disconnected");
         });
     });
+
+    /** その app を subscribe している全接続へ送る。 */
+    function broadcastToApp(appId: string, message: ServerMessage): void {
+        for (const s of sessions.values()) {
+            if (s.appIds.has(appId)) send(s.ws, message);
+        }
+    }
 
     // ── 操作権の変化を、その app を見ている全接続へ (接続ごとに役割が違う) ──
     const onControlChanged = (appId: string) => {
@@ -158,6 +169,7 @@ async function handleClient(
     session: Session,
     msg: ClientMessage,
     { registry, streamer, playLog, control }: WsBrokerDeps,
+    broadcastToApp: (appId: string, message: ServerMessage) => void,
 ): Promise<void> {
     switch (msg.type) {
         case "subscribe": {
@@ -191,6 +203,21 @@ async function handleClient(
             } else {
                 control.release(msg.appId, session.id);
             }
+            return;
+        }
+        case "comment": {
+            // 感想は操作権に関係なく、その app を見ている接続なら送れる (UI は観戦者にだけ出す)。
+            if (!isCommentMessage(msg) || !session.appIds.has(msg.appId)) return;
+            const text = normalizeCommentText(msg.text);
+            if (text === null) {
+                send(session.ws, { type: "error", message: "comment must be 1-200 characters" });
+                return;
+            }
+            const now = Date.now();
+            if (!canPostComment(session.lastCommentAt, now)) return;   // 連投は黙って捨てる
+            session.lastCommentAt = now;
+            broadcastToApp(msg.appId, { type: "comment", appId: msg.appId, text, ts: now });
+            playLog?.recordComment(msg.appId, session.user.id, text);
             return;
         }
         case "key": {

@@ -72,6 +72,21 @@ Custos は複数人が同時に操作することを想定しない。app ごと
   ブラウザは REST に `x-custos-client: <clientId>` を付ける (これで REST の呼び出し元を WS の接続と結び付ける)。
 - 操作権は全ポートの WS broker と REST で 1 つを共有する (`src/main.ts`)。
 
+### 1.5 観戦者の「見てるだけ」と感想 (2026-10-15 neco 指示)
+
+観戦者はパッドを使えないので、パッドを出さず「👁 見てるだけ」パネルを出し、感想を送れるようにする。
+
+- **画面**: 観戦中 (`role=spectator`) は PAD の中身 (`#padRoot`) を隠し、`#spectatorPanel` (見出し・説明・入力欄・送信・届いた感想の一覧) を出す
+  (`public/js/comment-panel.js`)。player / free では出さない。
+- **WS**: クライアント → サーバー `comment { appId, text }`。サーバーは subscribe 中の接続からだけ受け、本文を整形して
+  (改行・タブは空白、他の制御文字は除去、前後の空白を落とす)、1〜200 文字 (code point) だけを通す。1 接続 1 秒に 1 件まで
+  (超えた分は黙って捨てる、`src/ws/comment-message.ts`)。サーバー → その app を subscribe している全接続へ
+  `comment { appId, text, ts }`。送った人の識別子は配らない。
+- **操作中の人の画面**: 届いた感想を映像の上に 6 秒出す (最大 3 件、押しても映像へ通す、`public/js/comment-overlay.js`)。
+  観戦者のパネルの一覧にも足す (自分の送ったものもサーバーから戻った時点で載る)。
+- **行動ログ**: その app で記録中の run (= 操作中の人のプレイ) に `comment` 行を書く (§2.4)。記録中の run が無ければ書かない
+  (感想だけで run は開かない)。
+
 ## 2. 行動ログ (play log)
 
 ### 2.1 目的と方針
@@ -112,7 +127,7 @@ app 設定に任意の `playLog` を追加。無ければ記録しない。
 | `seq` | int | run 内で 0 から狭義単調増加 (Commentarii の `tick`) |
 | `t_ms` | int | run 開始からのミリ秒 (Commentarii の `t`, scale 0.001) |
 | `at` | string | ISO 8601 時刻 (先頭行を `started_at` に使える) |
-| `kind` | string | `start` / `input` / `state` / `end` |
+| `kind` | string | `start` / `input` / `state` / `comment` / `end` |
 | `state.<key>` | any | 直近に取得したゲーム状態 (全行に最新値を載せる。未取得なら列なし) |
 
 `kind` ごとの追加列:
@@ -122,6 +137,7 @@ app 設定に任意の `playLog` を追加。無ければ記録しない。
 | `start` | `source` (`ws`) |
 | `input` | `input` (操作名、下記)、`device` (`key`/`pointer`/`button`)、`key`、`down`、`x`、`y`、`button`、`phase`、`pos` (`[x, y, 0]`、pointer のみ) |
 | `state` | なし (状態が前回と変わったときだけ出す。変化検出は JSON 文字列比較) |
+| `comment` | `comment` (感想の本文、整形済み)、`commenter` (送った人の HMAC。`player` と同じハッシュ。生の ID は書かない) (§1.5) |
 | `end` | `reason` (`unsubscribe`/`disconnect`/`idle`/`exit`/`shutdown`) |
 
 `input` 列は Commentarii の `action.verbs` に書きやすい粒度にする:
@@ -166,6 +182,9 @@ app 設定に任意の `playLog` を追加。無ければ記録しない。
 | `src/routes/playlog-routes.ts` | 一覧 / 取得 API |
 | `src/capture/ergo-custos-client.ts` | `sendPointer` / `fetchState` を追加 |
 | `public/js/play-input.js` | 座標正規化・キー名変換の純関数 |
+| `src/ws/comment-message.ts` | 感想メッセージの検証・本文整形・連投制限 (純関数) |
+| `public/js/comment-panel.js` | 観戦者の「見てるだけ」パネル (感想の送信と一覧) |
+| `public/js/comment-overlay.js` | 感想を映像の上に一時表示 |
 | Unity `Runtime/Input/VirtualPointerInjector.cs` | 仮想 Mouse への注入 |
 | Unity `Runtime/Protocol/PointerPayload.cs` | `/pointer` DTO |
 | Unity `Runtime/CustosPlayState.cs` | ゲームが状態を登録する入口 |
@@ -177,3 +196,5 @@ app 設定に任意の `playLog` を追加。無ければ記録しない。
 3. 生のユーザー ID がログに出ない。
 4. vitest: 座標正規化・キー名変換・行組み立て・recorder (開閉・seq・idle・状態差分)・API のパス検証。Unity: HidKeyMap と同様に pointer 座標変換を EditMode テスト。
 5. `npm run build` / `npm test` が通る。
+6. 観戦中はパッドが消えて「見てるだけ」パネルが出て、送った感想が操作中の人の映像の上に出る。playLog 有効なら記録中の run に `comment` 行が残る (§1.5)。
+   Commentarii は mapping で名指しした列しか読まないので、`comment` / `commenter` 列を足しても取り込み設定は変わらない (自由記述は明示許可が要る)。

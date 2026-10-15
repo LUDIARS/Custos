@@ -196,6 +196,19 @@ body.unity-mode .unity-only { display: flex !important; }
   background: rgba(0,0,0,0.65); color: var(--warn); border: 1px solid var(--warn);
   pointer-events: none;
 }
+/* 感想 (comment-overlay.js)。映像の下側に積み、操作の邪魔をしない */
+.comment-overlay {
+  position: absolute; left: 8px; right: 8px; bottom: 8px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  pointer-events: none;
+}
+.comment-bubble {
+  max-width: 100%; padding: 4px 10px; border-radius: 12px;
+  background: rgba(0,0,0,0.65); color: #fff; font-size: 13px;
+  overflow-wrap: anywhere;
+  animation: comment-fade 6s ease forwards;
+}
+@keyframes comment-fade { 0%, 85% { opacity: 1; } 100% { opacity: 0; } }
 .rtc-status { color: var(--fg-faint); }
 .rtc-status[data-state="live"]  { color: var(--ok); }
 .rtc-status[data-state="retry"] { color: var(--warn); }

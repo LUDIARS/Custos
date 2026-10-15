@@ -75,6 +75,22 @@ describe("PlayLogRecorder", () => {
         expect(h.recorder.openRuns).toBe(0);
     });
 
+    it("writes a spectator comment into the open run of the app with a hashed commenter", () => {
+        const h = harness(app(enabled));
+        recorders.push(h.recorder);
+        h.recorder.recordComment("demo", "viewer-1", "いいね");               // 記録中の run が無い: 何もしない
+        expect(h.files.size).toBe(0);
+        h.recorder.recordInput("s1", "player-1", "demo", { device: "key", key: "W", down: true });
+        h.advance(40);
+        h.recorder.recordComment("demo", "viewer-1", "いいね");
+        h.recorder.recordComment("other", "viewer-1", "別 app");              // 別 app の run は無い
+        const rows = h.rows();
+        expect(rows.map((r) => r.kind)).toEqual(["start", "input", "comment"]);
+        expect(rows[2]).toMatchObject({ comment: "いいね", commenter: "h(viewer-1)", player: "h(player-1)", t_ms: 40 });
+        expect(JSON.stringify(rows)).not.toContain("\"viewer-1\"");
+        expect(h.recorder.openRuns).toBe(1);
+    });
+
     it("records pointer moves only while pressed and at most every 100ms", () => {
         const h = harness(app(enabled));
         recorders.push(h.recorder);

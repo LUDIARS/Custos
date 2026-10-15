@@ -96,6 +96,8 @@
                 <div class="ph-hint" id="streamPlaceholderHint">上のセレクタからアプリを選ぶと映像につながります。</div>
               </div>
               <div class="spectator-banner" id="spectatorBanner" hidden>観戦中 — 他のユーザがプレイしています</div>
+              <!-- 感想 (comment-overlay.js)。数秒で消える。押しても映像へ通す -->
+              <div class="comment-overlay" id="commentOverlay" aria-live="polite"></div>
             </div>
           </section>
         </div>
@@ -125,6 +127,16 @@
       </header>
       <div class="fw-body pad-body" id="padRoot">
         <div class="vk-empty">アプリを選択するとバーチャルパッドが表示されます。</div>
+      </div>
+      <!-- 観戦中はパッドの代わりに出す (comment-panel.js) -->
+      <div class="fw-body spectator-panel" id="spectatorPanel" hidden>
+        <p class="spectator-panel-title">👁 見てるだけ</p>
+        <p class="spectator-panel-hint">他の人がプレイ中です。感想を送るとプレイ中の人の画面に出ます。</p>
+        <form class="comment-form" id="commentForm">
+          <input type="text" id="commentInput" placeholder="感想を書く" autocomplete="off" enterkeyhint="send" />
+          <button type="submit">送る</button>
+        </form>
+        <ul class="comment-list" id="commentList"></ul>
       </div>
       <div class="fw-resize" data-fw-resize aria-hidden="true"></div>
     </section>

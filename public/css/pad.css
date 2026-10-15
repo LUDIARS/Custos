@@ -133,8 +133,26 @@
 .vk-btn[data-kind="dir"] .vk-keytag,
 .vk-btn[data-kind^="act-"] .vk-keytag { bottom: 3px; right: 50%; transform: translateX(50%); }
 
-/* 観戦中はパッドを押せない */
-body[data-role="spectator"] .vk-pad { opacity: 0.4; pointer-events: none; }
+/* 観戦中はパッドを出さず、「見てるだけ」パネル (comment-panel.js) を出す */
+body[data-role="spectator"] #padRoot { display: none !important; }
+.spectator-panel[hidden] { display: none !important; }
+.spectator-panel {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 10px 12px; overflow: auto;
+}
+.spectator-panel-title { margin: 0; font-size: 16px; font-weight: 700; color: var(--warn); }
+.spectator-panel-hint  { margin: 0; font-size: 12px; color: var(--fg-faint); }
+.comment-form { display: flex; gap: 6px; }
+.comment-form input {
+  flex: 1 1 auto; min-width: 0;
+  padding: 8px 10px; font: inherit; font-size: 16px;   /* 16px 未満だと iOS が入力時に拡大する */
+  background: var(--bg-card); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 8px;
+  -webkit-user-select: text; user-select: text;
+}
+.comment-form button { flex: 0 0 auto; padding: 8px 14px; }
+.comment-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.comment-list time { color: var(--fg-faint); font-size: 11px; }
 
 /* スマホ: 3 段を縦画面に収める (スティック・ボタンは画面幅に合わせて縮む) */
 body.layout-mobile .vk-pad { gap: 6px 4px; }

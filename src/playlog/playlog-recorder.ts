@@ -85,6 +85,17 @@ export class PlayLogRecorder {
         this.write(run, "input", inputFields(input));
     }
 
+    /**
+     * 感想 1 件を、その app で記録中の run (= 操作中の人のプレイ) に `comment` 行として書く。
+     * 記録中の run が無ければ何もしない (感想だけで run は開かない)。送った人は生の ID を書かずハッシュにする。
+     */
+    recordComment(appId: string, userId: string, text: string): void {
+        const commenter = this.deps.hashPlayer(userId);
+        for (const run of this.runs.values()) {
+            if (run.appId === appId) this.write(run, "comment", { comment: text, commenter });
+        }
+    }
+
     closeSessionApp(sessionId: string, appId: string, reason: PlayLogEndReason): void {
         const run = this.runs.get(runKey(sessionId, appId));
         if (run) this.close(run, reason);

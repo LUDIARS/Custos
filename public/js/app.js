@@ -21,6 +21,8 @@ import { createSettingsPanel } from "/js/settings-panel.js";
 import { createWsClient } from "/js/ws-client.js";
 import { createStatusMenu } from "/js/status-menu.js";
 import { installTouchGuard } from "/js/touch-guard.js";
+import { createCommentPanel } from "/js/comment-panel.js";
+import { createCommentOverlay } from "/js/comment-overlay.js";
 
 const $ = (id) => document.getElementById(id);
 const appSelect = $("appSelect");
@@ -92,10 +94,21 @@ const stream = createStreamView({
     log,
 });
 
+const commentPanel = createCommentPanel({
+    panel: $("spectatorPanel"),
+    list: $("commentList"),
+    form: $("commentForm"),
+    input: $("commentInput"),
+    send: (msg) => ws.send(msg),
+    getAppId: () => state.appId,
+});
+const commentOverlay = createCommentOverlay({ root: $("commentOverlay") });
+
 const control = createControlState({
     badge: $("roleBadge"),
     banner: $("spectatorBanner"),
-    onChange: () => {
+    onChange: (role) => {
+        commentPanel.setRole(role);
         const operable = control.canOperate();
         if (!operable) pad.releaseAll();
         playInput.onRoleChanged();
@@ -198,6 +211,8 @@ async function onAppChange() {
     state.lifecycle = null;
     state.unityPlaying = null;
     control.setApp(id);
+    commentPanel.setApp();
+    commentOverlay.clear();
     unityPanel.setApp(state.config);
     pad.setApp(state.config);
     playInput.onAppChanged();
@@ -300,6 +315,11 @@ function handleServerMessage(msg) {
             return;
         case "screenshot":
             stream.showFrame(msg);
+            return;
+        case "comment":
+            if (msg.appId !== state.appId) return;
+            commentOverlay.show(msg.text);
+            commentPanel.add(msg);
             return;
         case "error":
             log(`[ws-error] ${msg.message}`, true);

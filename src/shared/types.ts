@@ -50,6 +50,8 @@ export type ServerMessage =
     | { type: "status";     appId: string;  status: AppStatus }
     | { type: "exit";       appId: string;  kind: RunnerKind;  exitCode: number | null; signal: string | null; ts: number }
     | { type: "screenshot"; appId: string;  ts: number; png_b64: string; mime: "image/png"; bytes: number }
+    /** 観戦者などの感想。その app を見ている全接続へ配る (本文は整形済み)。 */
+    | { type: "comment";    appId: string;  text: string; ts: number }
     | { type: "error";      message: string };
 
 /** Client → Server. */
@@ -62,4 +64,6 @@ export type ClientMessage =
     | { type: "pointer";     appId: string; x: number;    y: number; button: "left" | "right" | "middle"; phase: "down" | "up" | "move" }
     | { type: "button";      appId: string; id: string }
     /** 遠隔プレイの ON/OFF。want=true で操作権を取りにいき、false で手放す。 */
-    | { type: "control";     appId: string; want: boolean };
+    | { type: "control";     appId: string; want: boolean }
+    /** 感想を送る (観戦者の「見てるだけ」パネルから)。本文はサーバーが整形・検証する。 */
+    | { type: "comment";     appId: string; text: string };
