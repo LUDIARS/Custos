@@ -7,7 +7,7 @@ import { getToken, wsBase } from "/js/api.js";
 
 const RECONNECT_DELAY_MS = 1_500;
 
-export function createWsClient({ statusEl, onOpen, onMessage }) {
+export function createWsClient({ statusEl, onOpen, onMessage, onClose = () => {} }) {
     let ws = null;
 
     function connect() {
@@ -29,6 +29,7 @@ export function createWsClient({ statusEl, onOpen, onMessage }) {
             onMessage(msg);
         });
         socket.addEventListener("close", () => {
+            onClose();
             setStatus(false, "WS disconnected — retrying");
             window.setTimeout(connect, RECONNECT_DELAY_MS);
         });
@@ -36,8 +37,9 @@ export function createWsClient({ statusEl, onOpen, onMessage }) {
     }
 
     function send(obj) {
-        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        if (!ws || ws.readyState !== WebSocket.OPEN) return false;
         ws.send(JSON.stringify(obj));
+        return true;
     }
 
     function setStatus(connected, text) {

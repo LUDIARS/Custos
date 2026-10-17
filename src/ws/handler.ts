@@ -17,6 +17,7 @@
 import type { Server as HttpServer, IncomingMessage } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
 import { randomUUID } from "node:crypto";
+import { AudienceRoom, AudienceSubmission } from "../audience/room.js";
 import { childLogger } from "../shared/logger.js";
 import type { AppsRegistry } from "../apps/registry.js";
 import type { AppsRunner }   from "../apps/runner.js";
@@ -39,6 +40,8 @@ interface Session {
     id:    string;
     ws:    WebSocket;
     appIds: Set<string>;
+    audienceAppIds: Set<string>;
+    lastAudienceAt: number | null;
     user:  VerifiedUser;
     /** 最後に感想を送った時刻 (連投の制限用)。 */
     lastCommentAt: number | null;
@@ -50,6 +53,8 @@ export interface WsBrokerDeps {
     streamer:   ScreenshotStreamer;
     /** 行動ログ。未指定なら記録しない。 */
     playLog?:   PlayLogRecorder;
+    audienceNow?: () => number;
+    audience?: AudienceRoom;
     /** 遠隔プレイの操作権。全ポートの broker と REST で共有する。 */
     control:    ControlLease;
 }
@@ -61,6 +66,13 @@ export function attachWebSocketBroker(
 ): WebSocketServer {
     const wss = new WebSocketServer({ server: httpServer, path });
     const sessions = new Map<string, Session>();
+    const audience = deps.audience ?? new AudienceRoom(deps.audienceNow);
+    const releaseAudience = audience.subscribe((event) => {
+        for (const session of sessions.values()) {
+            if (session.audienceAppIds.has(event.appId)) send(session.ws, { type: "audience-event", appId: event.appId, event });
+        }
+    });
+    wss.on("close", releaseAudience);
 
     wss.on("connection", async (ws, req: IncomingMessage) => {
         const user = await authorize(req);
@@ -72,6 +84,8 @@ export function attachWebSocketBroker(
             id: randomUUID(),
             ws,
             appIds: new Set(),
+            audienceAppIds: new Set(),
+            lastAudienceAt: null,
             user,
             lastCommentAt: null,
         };
@@ -88,7 +102,11 @@ export function attachWebSocketBroker(
                 send(ws, { type: "error", message: "invalid JSON" });
                 return;
             }
-            handleClient(session, msg, deps, broadcastToApp).catch((err) => {
+            if (!msg || typeof msg !== "object") {
+                send(ws, { type: "error", message: "invalid message" });
+                return;
+            }
+            handleClient(session, msg, deps, audience, broadcastToApp).catch((err) => {
                 log.warn({ err }, "client message handler failed");
                 send(ws, { type: "error", message: errMsg(err) });
             });
@@ -168,10 +186,38 @@ export function attachWebSocketBroker(
 async function handleClient(
     session: Session,
     msg: ClientMessage,
-    { registry, streamer, playLog, control }: WsBrokerDeps,
+    { registry, streamer, playLog, control, audienceNow = Date.now }: WsBrokerDeps,
+    audience: AudienceRoom,
     broadcastToApp: (appId: string, message: ServerMessage) => void,
 ): Promise<void> {
     switch (msg.type) {
+        case "audience-send": {
+            const parsed = AudienceSubmission.safeParse(msg);
+            if (!parsed.success || !session.appIds.has(parsed.data.appId)) {
+                send(session.ws, { type: "error", message: "invalid audience message or subscription" });
+                return;
+            }
+            const now = audienceNow();
+            if (session.lastAudienceAt !== null && now - session.lastAudienceAt < 750) {
+                send(session.ws, { type: "error", message: "少し待ってから送信してください。" });
+                return;
+            }
+            session.lastAudienceAt = now;
+            const sender = ["anon", "dev-anon", "stub"].includes(session.user.id)
+                ? `観戦者 ${session.id.slice(0, 4)}` : session.user.name || "観戦者";
+            audience.append(parsed.data, sender);
+            if (parsed.data.kind === "message") playLog?.recordComment(parsed.data.appId, session.user.id, parsed.data.text);
+            return;
+        }
+        case "audience-subscribe": {
+            if (typeof msg.appId !== "string" || !registry.getConfig(msg.appId)) {
+                send(session.ws, { type: "error", message: "unknown audience app" });
+                return;
+            }
+            session.audienceAppIds.add(msg.appId);
+            send(session.ws, { type: "audience-history", appId: msg.appId, events: audience.history(msg.appId) });
+            return;
+        }
         case "subscribe": {
             const cfg = registry.getConfig(msg.appId);
             if (!cfg) {
@@ -179,6 +225,8 @@ async function handleClient(
                 return;
             }
             session.appIds.add(msg.appId);
+            session.audienceAppIds.add(msg.appId);
+            send(session.ws, { type: "audience-history", appId: msg.appId, events: audience.history(msg.appId) });
             const status = registry.getStatus(msg.appId);
             if (status) send(session.ws, { type: "hello", appId: msg.appId, status });
             send(session.ws, { type: "control", appId: msg.appId, role: control.roleOf(msg.appId, session.id) });
@@ -188,6 +236,7 @@ async function handleClient(
         }
         case "unsubscribe": {
             session.appIds.delete(msg.appId);
+            session.audienceAppIds.delete(msg.appId);
             streamer.release(msg.appId, session.id);
             playLog?.closeSessionApp(session.id, msg.appId, "unsubscribe");
             control.release(msg.appId, session.id);
@@ -217,6 +266,7 @@ async function handleClient(
             if (!canPostComment(session.lastCommentAt, now)) return;   // 連投は黙って捨てる
             session.lastCommentAt = now;
             broadcastToApp(msg.appId, { type: "comment", appId: msg.appId, text, ts: now });
+            audience.append({ type: "audience-send", appId: msg.appId, kind: "message", text }, "観戦者");
             playLog?.recordComment(msg.appId, session.user.id, text);
             return;
         }

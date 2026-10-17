@@ -21,8 +21,7 @@ import { createSettingsPanel } from "/js/settings-panel.js";
 import { createWsClient } from "/js/ws-client.js";
 import { createStatusMenu } from "/js/status-menu.js";
 import { installTouchGuard } from "/js/touch-guard.js";
-import { createCommentPanel } from "/js/comment-panel.js";
-import { createCommentOverlay } from "/js/comment-overlay.js";
+import { createAudiencePanel } from "/js/audience-panel.js";
 
 const $ = (id) => document.getElementById(id);
 const appSelect = $("appSelect");
@@ -75,9 +74,11 @@ windowManager = createWindowManager({
 const ws = createWsClient({
     statusEl: $("wsStatus"),
     onOpen: () => {
+        audiencePanel.setConnected(true);
         if (state.appId) ws.send({ type: "subscribe", appId: state.appId });
     },
     onMessage: handleServerMessage,
+    onClose: () => audiencePanel.setConnected(false),
 });
 
 const stream = createStreamView({
@@ -94,21 +95,16 @@ const stream = createStreamView({
     log,
 });
 
-const commentPanel = createCommentPanel({
-    panel: $("spectatorPanel"),
-    list: $("commentList"),
-    form: $("commentForm"),
-    input: $("commentInput"),
+const audiencePanel = createAudiencePanel({
     send: (msg) => ws.send(msg),
     getAppId: () => state.appId,
 });
-const commentOverlay = createCommentOverlay({ root: $("commentOverlay") });
 
 const control = createControlState({
     badge: $("roleBadge"),
     banner: $("spectatorBanner"),
     onChange: (role) => {
-        commentPanel.setRole(role);
+        audiencePanel.setRole(role);
         const operable = control.canOperate();
         if (!operable) pad.releaseAll();
         playInput.onRoleChanged();
@@ -205,6 +201,7 @@ async function onAppChange() {
     // 別 app に切り替えたら未完了の BOOT チェインは捨てる (前の app の build 完了で
     // 別 app の run が走ると混乱する)。
     if (state.boot.pending && state.boot.appId !== id) state.boot = { pending: false, appId: null };
+    playInput.onAppChanged();
     if (state.appId) ws.send({ type: "unsubscribe", appId: state.appId });
 
     state.appId = id;
@@ -212,8 +209,8 @@ async function onAppChange() {
     state.lifecycle = null;
     state.unityPlaying = null;
     control.setApp(id);
-    commentPanel.setApp();
-    commentOverlay.clear();
+    audiencePanel.onAppChanged();
+    audiencePanel.setRole(control.role());
     unityPanel.setApp(state.config);
     pad.setApp(state.config);
     playInput.onAppChanged();
@@ -327,11 +324,8 @@ function handleServerMessage(msg) {
         case "screenshot":
             stream.showFrame(msg);
             return;
-        case "comment":
-            if (msg.appId !== state.appId) return;
-            commentOverlay.show(msg.text);
-            commentPanel.add(msg);
-            return;
+        case "audience-event":
+        case "audience-history": audiencePanel.receive(msg); return;
         case "error":
             log(`[ws-error] ${msg.message}`, true);
             return;

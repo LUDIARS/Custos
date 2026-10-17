@@ -5,6 +5,8 @@
  * 配信ペイロードはすべてこのファイルから引いて統一する。
  */
 
+import type { AudienceEvent, AudienceSubmission } from "../audience/room.js";
+
 export type RunnerKind = "build" | "run" | "test";
 
 /// アプリのライフサイクル状態。`crashed` は exitCode != 0 で終わったケース。
@@ -41,6 +43,8 @@ export type ControlRole = "player" | "spectator" | "free";
 
 /** Server → Client. */
 export type ServerMessage =
+    | { type: "audience-event"; appId: string; event: AudienceEvent }
+    | { type: "audience-history"; appId: string; events: AudienceEvent[] }
     /** 接続直後に 1 回。clientId は REST の `x-custos-client` ヘッダに付ける。 */
     | { type: "welcome";    clientId: string }
     /** subscribe 中の app の操作権が変わったとき (と subscribe 直後)。 */
@@ -56,6 +60,8 @@ export type ServerMessage =
 
 /** Client → Server. */
 export type ClientMessage =
+    | AudienceSubmission
+    | { type: "audience-subscribe"; appId: string }
     | { type: "subscribe";   appId: string }
     | { type: "unsubscribe"; appId: string }
     | { type: "key";         appId: string; key: string;  down: boolean }

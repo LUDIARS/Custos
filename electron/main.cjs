@@ -78,6 +78,19 @@ function createWindow() {
     });
     mainWindow.loadURL(`http://localhost:${FRONTEND_PORT}/`);
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+        const target = new URL(url);
+        if (target.origin === `http://localhost:${FRONTEND_PORT}` && target.pathname === "/audience-log.html") {
+            return {
+                action: "allow",
+                overrideBrowserWindowOptions: {
+                    parent: mainWindow,
+                    width: 520,
+                    height: 650,
+                    title: "観戦ログ — Custos",
+                    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
+                },
+            };
+        }
         shell.openExternal(url);
         return { action: "deny" };
     });

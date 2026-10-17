@@ -1,0 +1,32 @@
+/* A reserved edge keeps messages outside the game and Custos controls. */
+.stream-frame { --audience-rail: clamp(150px, 24%, 230px); padding-right: var(--audience-rail); overflow: hidden; }
+#streamVideo, #streamImage { max-width: 100%; }
+.audience-messages { position: absolute; right: 8px; top: 8px; width: calc(var(--audience-rail) - 16px); display: grid; gap: 8px; pointer-events: none; z-index: 2; }
+.audience-message { padding: 8px; border-radius: 8px; background: #162238e8; color: #f4f7ff; font: 13px/1.5 system-ui, sans-serif; overflow-wrap: anywhere; white-space: pre-wrap; max-height: 7.5em; overflow: hidden; animation: audience-message 5s linear forwards; }
+.audience-stamps-overlay { position: absolute; inset: 0 var(--audience-rail) 0 0; overflow: hidden; pointer-events: none; z-index: 3; }
+.audience-float { position: absolute; bottom: 0; font-size: clamp(32px, 5vw, 56px); animation: audience-rise 5s ease-out forwards; }
+@keyframes audience-rise { from { transform: translateY(100%); opacity: 1; } 80% { opacity: 1; } to { transform: translateY(-220px); opacity: 0; } }
+@keyframes audience-message { 0%, 85% { opacity: 1; } 100% { opacity: 0; } }
+.audience-panel { border-top: 1px solid var(--border, #35405a); padding: 6px 10px; background: var(--bg-card, #151b29); }
+.audience-form { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.audience-form input { flex: 1 1 180px; min-width: 100px; padding: 7px; font: inherit; font-size: 16px; background: var(--bg-card, #151b29); color: var(--fg, #edf3ff); border: 1px solid var(--border, #35405a); border-radius: 6px; -webkit-user-select: text; user-select: text; }
+.audience-stamps { display: flex; gap: 4px; flex-wrap: wrap; }
+.audience-stamps button { font-size: 21px; min-width: 36px; min-height: 36px; padding: 3px; }
+.audience-status { font-size: 12px; margin: 5px 0 0; color: var(--fg-faint, #b9c3d8); }
+.stream-frame .spectator-banner { left: 8px; transform: none; max-width: calc(100% - var(--audience-rail) - 16px); }
+.audience-log-page { color-scheme: dark; background: #101725; color: #edf3ff; font: 14px/1.6 system-ui, sans-serif; margin: 20px; touch-action: auto; }
+.audience-log-page h1 { font-size: 20px; margin-bottom: 4px; }
+.audience-log-page header { border-bottom: 1px solid #35405a; }
+.audience-log-page p { color: #b9c3d8; }
+#audienceLog { list-style: none; padding: 0; }
+#audienceLog li { padding: 10px 0; border-bottom: 1px solid #273147; overflow-wrap: anywhere; white-space: pre-wrap; }
+@media (max-width: 820px), (pointer: coarse) and (orientation: portrait) {
+    .stream-frame { padding-right: 0; padding-bottom: 86px; }
+    .audience-messages { inset: auto 8px 4px 8px; width: auto; max-height: 78px; overflow: hidden; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .audience-message { font-size: 11px; padding: 4px; max-height: 70px; }
+    .audience-stamps-overlay { inset: 0 0 86px; }
+    .stream-frame .spectator-banner { max-width: calc(100% - 16px); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .audience-float { animation-name: audience-message; }
+}

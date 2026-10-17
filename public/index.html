@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="stylesheet" href="/css/windows.css">
   <link rel="stylesheet" href="/css/pad.css">
+  <link rel="stylesheet" href="/css/audience.css">
 </head>
 <body data-role="free">
   <header class="app-header">
@@ -34,6 +35,7 @@
       <button type="button" class="window-toggle desktop-only" data-window-toggle="view">VIEW</button>
       <button type="button" class="window-toggle desktop-only" data-window-toggle="pad">PAD</button>
       <button type="button" class="window-toggle" data-window-toggle="logs">LOG</button>
+      <button id="audienceHistory" type="button" class="window-toggle" disabled>観戦ログ ↗</button>
       <button type="button" class="window-toggle" data-window-toggle="tests">TEST</button>
       <button type="button" class="window-toggle" data-window-toggle="settings">SETTINGS</button>
       <button type="button" class="window-toggle ghost desktop-only" id="btnResetLayout" title="ウインドウの配置を既定に戻す">⟲</button>
@@ -96,8 +98,8 @@
                 <div class="ph-hint" id="streamPlaceholderHint">上のセレクタからアプリを選ぶと映像につながります。</div>
               </div>
               <div class="spectator-banner" id="spectatorBanner" hidden>観戦中 — 他のユーザがプレイしています</div>
-              <!-- 感想 (comment-overlay.js)。数秒で消える。押しても映像へ通す -->
-              <div class="comment-overlay" id="commentOverlay" aria-live="polite"></div>
+              <div id="audienceMessages" class="audience-messages" aria-live="polite" aria-label="観戦メッセージ"></div>
+              <div id="audienceStampsOverlay" class="audience-stamps-overlay" aria-hidden="true"></div>
             </div>
           </section>
         </div>
@@ -128,15 +130,16 @@
       <div class="fw-body pad-body" id="padRoot">
         <div class="vk-empty">アプリを選択するとバーチャルパッドが表示されます。</div>
       </div>
-      <!-- 観戦中はパッドの代わりに出す (comment-panel.js) -->
+      <!-- 観戦中はパッドの代わりにメッセージとスタンプを送れる。 -->
       <div class="fw-body spectator-panel" id="spectatorPanel" hidden>
         <p class="spectator-panel-title">👁 見てるだけ</p>
         <p class="spectator-panel-hint">他の人がプレイ中です。感想を送るとプレイ中の人の画面に出ます。</p>
-        <form class="comment-form" id="commentForm">
-          <input type="text" id="commentInput" placeholder="感想を書く" autocomplete="off" enterkeyhint="send" />
+        <form class="audience-form" id="audienceForm">
+          <div id="audienceStamps" class="audience-stamps" aria-label="スタンプ"></div>
+          <input type="text" id="audienceText" maxlength="280" aria-label="観戦メッセージ" placeholder="感想を書く（280文字まで）" autocomplete="off" enterkeyhint="send" />
           <button type="submit">送る</button>
         </form>
-        <ul class="comment-list" id="commentList"></ul>
+        <p id="audienceStatus" class="audience-status" role="status"></p>
       </div>
       <div class="fw-resize" data-fw-resize aria-hidden="true"></div>
     </section>

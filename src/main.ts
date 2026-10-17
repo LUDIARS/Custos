@@ -21,6 +21,7 @@ import { AppsRunner }     from "./apps/runner.js";
 import { buildApp }       from "./app.js";
 import { attachWebSocketBroker } from "./ws/handler.js";
 import { ControlLease } from "./input/control-lease.js";
+import { AudienceRoom } from "./audience/room.js";
 import { createVideoSourcePool } from "./capture/shared-rtp-source.js";
 import { createAudioSourcePool } from "./capture/audio-source.js";
 import { IceServerProvider } from "./capture/ice-servers.js";
@@ -77,6 +78,7 @@ async function main() {
     );
     // 操作権は全ポートの WS broker と REST で 1 つを共有する (どちらのポートから繋いでも同じ player)。
     const control  = new ControlLease();
+    const audience = new AudienceRoom();
     const prefs    = new RuntimeStreamPrefs();
     const streamer = new ScreenshotStreamer(registry, prefs);
     // 行動ログ (spec/feature/remote-play-and-play-log.md)。salt はログを書くときだけ要るので
@@ -131,7 +133,7 @@ async function main() {
             logger.info({ host: info.address, port: info.port, label }, "listening");
         });
         // WS broker は全ポートで attach する (どちらに繋いでも /ws が動く)。
-        attachWebSocketBroker(s as unknown as HttpServer, { registry, runner, streamer, playLog, control }, "/ws");
+        attachWebSocketBroker(s as unknown as HttpServer, { registry, runner, streamer, playLog, control, audience }, "/ws");
         servers.push(s as unknown as HttpServer);
     }
 

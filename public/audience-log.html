@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>観戦ログ — Custos</title>
+  <link rel="stylesheet" href="/css/audience.css">
+</head>
+<body class="audience-log-page">
+  <header><h1>観戦ログ</h1><div id="audienceLogApp"></div><p id="audienceLogStatus" role="status">接続中…</p></header>
+  <p>直近200件のメッセージ・スタンプを表示します。Custosの再起動で履歴は消えます。</p>
+  <ol id="audienceLog" aria-label="観戦メッセージとスタンプの履歴" aria-live="polite"></ol>
+  <script type="module" src="/js/audience-log.js"></script>
+</body>
+</html>
