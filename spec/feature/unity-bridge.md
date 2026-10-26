@@ -43,6 +43,19 @@ Custos 本体 (TS) は一切変更せずに Unity アプリ/Editor を遠隔操�
 
 `codec` を付けない `GET /stream` は今までどおり生 BGRA。
 
+### 0.0.1 追加 endpoint: 音声配信 (2026-10-26)
+
+| endpoint | 内容 |
+|---|---|
+| `GET /audio` | 有効な AudioListener のミックス済み音声。本体は `[u32 BE 長さ][i64 BE 時刻µs][u8 チャンネル数]` + PCM s16le (チャンネル交互) の繰り返し、長さ 0 は 1 秒ごとの keepalive。ヘッダ `X-Audio-Format: s16le`、`X-Audio-Rate` (Hz)。ブリッジに音声が組み込まれていなければ 404 |
+
+- 見出しは `/stream?codec=h264` と同じ 13 バイトで、フラグのバイトにチャンネル数を入れる。時刻は Unix 時刻の µs
+  (映像の時刻はエンコーダ起動からの経過なので、両者を合わせるときは受け手の到着時刻で揃える)。
+- 音は `AudioTap` (`OnAudioFilterRead`) が音声スレッドで受け取り、接続ごとのキュー (約 10 秒分) に入れる。キューが溢れた分は送らない。
+- タップは main thread の `AudioStreamer.Maintain()` が 1 秒ごとに付け外しする: `/audio` の接続があって Play 中なら有効な AudioListener に付け
+  (シーンが変わって listener が替われば付け直す)、接続が無くなれば外す。接続が無い間は音を読まない。
+- タップは読むだけで、スピーカーへの出力は変えない。
+
 ### 0.1 既存プロトタイプ (prior art / 置き換え対象)
 
 `GameUnity/Assets/Scripts/Editor/Musa/UnityErgoCustosBridge.cs` (port 8687、`[InitializeOnLoad]`、

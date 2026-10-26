@@ -104,6 +104,10 @@ namespace Ludiars.Custos.Bridge
             var h264 = new H264Streamer(h264Encoder);
             provider.SetH264Target(h264);
             _server.H264Stream = h264;
+            // 音声配信 (/audio)。タップの付け外しはポンプの Maintain が行う。
+            var audio = new AudioStreamer();
+            pump.Audio = audio;
+            _server.AudioStream = audio;
             _server.Start();
 
             Application.quitting += () =>
@@ -127,11 +131,13 @@ namespace Ludiars.Custos.Bridge
     {
         internal Capture.RuntimeCameraViewProvider Provider;
         internal FrameStreamer Streamer;
+        internal AudioStreamer Audio;
 
         private void Update()
         {
             // BG スレッドからのアクションを main thread で実行
             MainThreadDispatcher.Pump();
+            Audio?.Maintain();
 
             // ストリーム接続があれば次フレームキャプチャをリクエスト
             if (Provider != null && Provider.HasActiveStream)

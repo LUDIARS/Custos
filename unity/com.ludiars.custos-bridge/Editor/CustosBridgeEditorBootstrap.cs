@@ -27,6 +27,7 @@ namespace Ludiars.Custos.Bridge.Editor
         private static GameObject    _hostGo;
         private static VideoEncoding.H264StreamEncoder _h264Encoder;
         private static H264Streamer  _h264;
+        private static AudioStreamer _audio;
 
         // ── 静的コンストラクタ ────────────────────────────
 
@@ -168,6 +169,9 @@ namespace Ludiars.Custos.Bridge.Editor
             _h264 = new H264Streamer(_h264Encoder);
             runtimeProvider.SetH264Target(_h264);
             _server.H264Stream = _h264;
+            // 音声配信 (/audio)。タップの付け外しは OnEditorUpdate の Maintain が行う。
+            _audio = new AudioStreamer();
+            _server.AudioStream = _audio;
             _server.Start();
 
             // quitting で injector も片付ける
@@ -194,6 +198,7 @@ namespace Ludiars.Custos.Bridge.Editor
             _h264Encoder?.Dispose();
             _h264Encoder = null;
             _h264 = null;
+            _audio = null;
             CustosCapturePublisher.Reset();
         }
 
@@ -202,6 +207,7 @@ namespace Ludiars.Custos.Bridge.Editor
         private static void OnEditorUpdate()
         {
             MainThreadDispatcher.Pump();
+            _audio?.Maintain();
 
             // ストリーム接続中はフレームキャプチャをリクエスト
             // (EditorApplication.update は ~100Hz 程度で呼ばれる)

@@ -96,6 +96,12 @@ namespace Ludiars.Custos.Bridge
         /// </summary>
         public H264Streamer H264Stream { get; set; }
 
+        /// <summary>
+        /// 音声配信 (/audio、AudioListener のミックス済み音声を PCM で送る)。未設定なら /audio は 404。
+        /// <see cref="Start"/> 前に設定する。
+        /// </summary>
+        public AudioStreamer AudioStream { get; set; }
+
         public void Start()
         {
             if (_isRunning) return;
@@ -208,6 +214,10 @@ namespace Ludiars.Custos.Bridge
                 case "/stream":
                     if (req.HttpMethod != "GET") { HttpJson.WriteJson(res, 405, "{\"error\":\"GET only\"}"); return; }
                     HandleStream(ctx);
+                    break;
+                case "/audio":
+                    if (req.HttpMethod != "GET") { HttpJson.WriteJson(res, 405, "{\"error\":\"GET only\"}"); return; }
+                    HandleAudio(ctx);
                     break;
                 case "/stream/keyframe":
                     if (req.HttpMethod != "POST") { HttpJson.WriteJson(res, 405, "{\"error\":\"POST only\"}"); return; }
@@ -438,6 +448,15 @@ namespace Ludiars.Custos.Bridge
                 return;
             }
             StartStreamThread(() => _streamer.StartStream(ctx));
+        }
+
+        // ── /audio ───────────────────────────────────────
+
+        private void HandleAudio(HttpListenerContext ctx)
+        {
+            var audio = AudioStream;
+            if (audio == null) { HttpJson.WriteJson(ctx.Response, 404, "{\"error\":\"audio stream not configured\"}"); return; }
+            StartStreamThread(() => audio.StartStream(ctx));
         }
 
         private void HandleStreamKeyframe(HttpListenerResponse res)
