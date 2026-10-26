@@ -55,6 +55,12 @@ Custos 本体 (TS) は一切変更せずに Unity アプリ/Editor を遠隔操�
 - タップは main thread の `AudioStreamer.Maintain()` が 1 秒ごとに付け外しする: `/audio` の接続があって Play 中なら有効な AudioListener に付け
   (シーンが変わって listener が替われば付け直す)、接続が無くなれば外す。接続が無い間は音を読まない。
 - タップは読むだけで、スピーカーへの出力は変えない。
+- 音が AudioListener を通らないゲーム (独自の音声エンジン・ミドルウェアで鳴らすもの) は、`CustosAudioFeed` で自分のミックスを渡す:
+  `Use(レート)` で宣言すると、その間タップは使わず (付いていれば外す)、`/audio` の `X-Audio-Rate` は宣言の値になる。
+  `IsListening` の間だけ `Push(float[] チャンネル交互, 個数, チャンネル数)` で渡す (どのスレッドからでもよい)。`Release()` でタップに戻る。
+  宣言は Editor のドメイン再読み込み (Play に入るとき) で消えるので、ゲームは Play ごとに宣言し直す。
+  内部では、タップの音は `AudioStreamer.Push`、ゲームの音は `AudioStreamer.PushExternal` (宣言が無ければ捨てる) が受け、
+  どちらも同じ変換 (float → s16le、チャンネル交互で個数がチャンネル数で割り切れないものは捨てる) で各接続のキューへ入れる。
 
 ### 0.1 既存プロトタイプ (prior art / 置き換え対象)
 

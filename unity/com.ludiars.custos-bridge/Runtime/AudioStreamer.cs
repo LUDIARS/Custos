@@ -9,6 +9,9 @@
 // 付け外しは main thread の Maintain() が 1 秒ごとに行う: 接続があって Play 中なら有効な
 // AudioListener に付け (シーン切替で listener が変われば付け直す)、接続が無くなれば外す。
 // スピーカーへの出力は変えない (タップは読むだけ)。
+//
+// 音が AudioListener を通らないゲーム (独自の音声エンジンで鳴らすもの) は、CustosAudioFeed.Use で
+// 自分のミックスを渡すと宣言し、Push で PCM を渡す。宣言している間はタップを使わず、レートも宣言の値にする。
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
 
 using System;
@@ -33,6 +36,8 @@ namespace Ludiars.Custos.Bridge
         private readonly Stopwatch _clock = Stopwatch.StartNew();
         private readonly long _epochUs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1000;
         private volatile int _sampleRate;
+        /// <summary>ゲームが自分で渡すと宣言した音のレート (0 = 宣言なし。タップを使う)。</summary>
+        private volatile int _externalRate;
         private AudioTap _tap;
         private float _nextMaintain;
 
@@ -67,7 +72,7 @@ namespace Ludiars.Custos.Bridge
             _nextMaintain = Time.realtimeSinceStartup + MaintainIntervalSeconds;
             _sampleRate = AudioSettings.outputSampleRate;
 
-            if (!HasActiveStream || !Application.isPlaying)
+            if (_externalRate > 0 || !HasActiveStream || !Application.isPlaying)
             {
                 Detach();
                 return;
@@ -97,7 +102,7 @@ namespace Ludiars.Custos.Bridge
                 res.ContentType = "application/octet-stream";
                 res.SendChunked = true;
                 res.Headers.Set("X-Audio-Format", "s16le");
-                res.Headers.Set("X-Audio-Rate", (_sampleRate > 0 ? _sampleRate : 48000).ToString());
+                res.Headers.Set("X-Audio-Rate", (_externalRate > 0 ? _externalRate : _sampleRate > 0 ? _sampleRate : 48000).ToString());
                 UnityEngine.Debug.Log("[CustosBridge] /audio started.");
                 Serve(conn, res.OutputStream);
             }
@@ -114,8 +119,20 @@ namespace Ludiars.Custos.Bridge
             }
         }
 
-        /// <summary>AudioTap から音声スレッドで呼ばれる。float を s16le にして各接続へ配る。</summary>
-        internal void Push(float[] data, int channels)
+        /// <summary>ゲームが自分の音を渡すと宣言する (以後タップは使わない)。0 以下で宣言を取り下げる。</summary>
+        internal void UseExternal(int sampleRate) => _externalRate = Math.Max(0, sampleRate);
+
+        /// <summary>宣言したゲームから呼ばれる。先頭 length 個 (チャンネル交互) を配る。宣言が無ければ捨てる。</summary>
+        internal void PushExternal(float[] data, int length, int channels)
+        {
+            if (_externalRate > 0) Push(data, length, channels);
+        }
+
+        /// <summary>AudioTap から音声スレッドで呼ばれる。</summary>
+        internal void Push(float[] data, int channels) => Push(data, data.Length, channels);
+
+        /// <summary>先頭 length 個 (チャンネル交互) の float を s16le にして各接続へ配る。</summary>
+        private void Push(float[] data, int length, int channels)
         {
             Connection[] targets;
             lock (_lock)
@@ -123,8 +140,10 @@ namespace Ludiars.Custos.Bridge
                 if (_connections.Count == 0) return;
                 targets = _connections.ToArray();
             }
-            var pcm = new byte[data.Length * 2];
-            for (int i = 0; i < data.Length; i++)
+            length = Math.Min(length, data.Length);
+            if (channels <= 0 || length <= 0 || length % channels != 0) return;
+            var pcm = new byte[length * 2];
+            for (int i = 0; i < length; i++)
             {
                 short s = (short)(Mathf.Clamp(data[i], -1f, 1f) * short.MaxValue);
                 pcm[i * 2] = (byte)s;

@@ -108,6 +108,7 @@ namespace Ludiars.Custos.Bridge
             var audio = new AudioStreamer();
             pump.Audio = audio;
             _server.AudioStream = audio;
+            CustosAudioFeed.Bind(audio);
             _server.Start();
 
             Application.quitting += () =>

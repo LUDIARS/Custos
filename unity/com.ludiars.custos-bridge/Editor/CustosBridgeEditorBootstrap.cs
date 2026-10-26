@@ -172,6 +172,7 @@ namespace Ludiars.Custos.Bridge.Editor
             // 音声配信 (/audio)。タップの付け外しは OnEditorUpdate の Maintain が行う。
             _audio = new AudioStreamer();
             _server.AudioStream = _audio;
+            CustosAudioFeed.Bind(_audio);
             _server.Start();
 
             // quitting で injector も片付ける
@@ -199,6 +200,7 @@ namespace Ludiars.Custos.Bridge.Editor
             _h264Encoder = null;
             _h264 = null;
             _audio = null;
+            CustosAudioFeed.Bind(null);
             CustosCapturePublisher.Reset();
         }
 
